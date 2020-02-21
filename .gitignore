@@ -1,2 +1,4 @@
 /target
 **/*.rs.bk
+# JetBrains IDE's config
+**/.idea
