@@ -8,8 +8,8 @@ pub mod messages;
 
 use sp_std::prelude::*;
 use codec::{Encode, Decode};
-use frame_support::{decl_module, decl_storage, decl_event, Parameter, ensure};
-use sp_runtime::{traits::{Member, SimpleArithmetic}, RuntimeDebug};
+use frame_support::{decl_module, decl_storage, decl_event, ensure};
+use sp_runtime::{RuntimeDebug};
 use system::ensure_signed;
 use pallet_timestamp;
 
@@ -25,7 +25,7 @@ pub struct Change<T: Trait> {
 
 #[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug)]
 pub struct Blog<T: Trait> {
-  pub id: T::BlogId,
+  pub id: BlogId,
   pub created: Change<T>,
   pub updated: Option<Change<T>>,
 
@@ -57,11 +57,11 @@ pub struct BlogHistoryRecord<T: Trait> {
 
 #[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug)]
 pub struct Post<T: Trait> {
-  pub id: T::PostId,
-  pub blog_id: T::BlogId,
+  pub id: PostId,
+  pub blog_id: BlogId,
   pub created: Change<T>,
   pub updated: Option<Change<T>>,
-  pub extension: PostExtension<T>,
+  pub extension: PostExtension,
 
   // Next fields can be updated by the owner only:
 
@@ -78,25 +78,25 @@ pub struct Post<T: Trait> {
 }
 
 #[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug)]
-pub struct PostUpdate<T: Trait> {
-  pub blog_id: Option<T::BlogId>,
+pub struct PostUpdate {
+  pub blog_id: Option<BlogId>,
   pub ipfs_hash: Option<Vec<u8>>,
 }
 
 #[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug)]
 pub struct PostHistoryRecord<T: Trait> {
   pub edited: Change<T>,
-  pub old_data: PostUpdate<T>,
+  pub old_data: PostUpdate,
 }
 
 #[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug)]
-pub enum PostExtension<T: Trait> {
+pub enum PostExtension {
   RegularPost,
-  SharedPost(T::PostId),
-  SharedComment(T::CommentId),
+  SharedPost(PostId),
+  SharedComment(CommentId),
 }
 
-impl<T: Trait> Default for PostExtension<T> {
+impl Default for PostExtension {
   fn default() -> Self {
     PostExtension::RegularPost
   }
@@ -104,9 +104,9 @@ impl<T: Trait> Default for PostExtension<T> {
 
 #[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug)]
 pub struct Comment<T: Trait> {
-  pub id: T::CommentId,
-  pub parent_id: Option<T::CommentId>,
-  pub post_id: T::PostId,
+  pub id: CommentId,
+  pub parent_id: Option<CommentId>,
+  pub post_id: PostId,
   pub created: Change<T>,
   pub updated: Option<Change<T>>,
 
@@ -148,7 +148,7 @@ impl Default for ReactionKind {
 
 #[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug)]
 pub struct Reaction<T: Trait> {
-  pub id: T::ReactionId,
+  pub id: ReactionId,
   pub created: Change<T>,
   pub updated: Option<Change<T>>,
   pub kind: ReactionKind,
@@ -205,20 +205,13 @@ impl Default for ScoringAction {
   }
 }
 
+pub type BlogId = u64;
+pub type PostId = u64;
+pub type CommentId = u64;
+pub type ReactionId = u64;
+
 /// The pallet's configuration trait.
 pub trait Trait: system::Trait + pallet_timestamp::Trait {
-  type BlogId: Parameter + Member + SimpleArithmetic + Default + Copy
-  /*+ From<usize>*/ + From<u64>;
-
-  type PostId: Parameter + Member + SimpleArithmetic + Default + Copy
-  /*+ From<usize>*/ + From<u64>;
-
-  type CommentId: Parameter + Member + SimpleArithmetic + Default + Copy
-  /*+ From<usize>*/ + From<u64>;
-
-  type ReactionId: Parameter + Member + SimpleArithmetic + Default + Copy
-  /*+ From<usize>*/ + From<u64>;
-
   /// The overarching event type.
   type Event: From<Event<Self>> + Into<<Self as system::Trait>::Event>;
 }
@@ -248,45 +241,45 @@ decl_storage! {
     pub FollowBlogActionWeight get (follow_blog_action_weight): i16 = DEFAULT_FOLLOW_BLOG_ACTION_WEIGHT;
     pub FollowAccountActionWeight get (follow_account_action_weight): i16 = DEFAULT_FOLLOW_ACCOUNT_ACTION_WEIGHT;
 
-    pub BlogById get(blog_by_id): map T::BlogId => Option<Blog<T>>;
-    pub PostById get(post_by_id): map T::PostId => Option<Post<T>>;
-    pub CommentById get(comment_by_id): map T::CommentId => Option<Comment<T>>;
-    pub ReactionById get(reaction_by_id): map T::ReactionId => Option<Reaction<T>>;
+    pub BlogById get(blog_by_id): map BlogId => Option<Blog<T>>;
+    pub PostById get(post_by_id): map PostId => Option<Post<T>>;
+    pub CommentById get(comment_by_id): map CommentId => Option<Comment<T>>;
+    pub ReactionById get(reaction_by_id): map ReactionId => Option<Reaction<T>>;
     pub SocialAccountById get(social_account_by_id): map T::AccountId => Option<SocialAccount<T>>;
 
-    pub BlogIdsByOwner get(blog_ids_by_owner): map T::AccountId => Vec<T::BlogId>;
-    pub PostIdsByBlogId get(post_ids_by_blog_id): map T::BlogId => Vec<T::PostId>;
-    pub CommentIdsByPostId get(comment_ids_by_post_id): map T::PostId => Vec<T::CommentId>;
+    pub BlogIdsByOwner get(blog_ids_by_owner): map T::AccountId => Vec<BlogId>;
+    pub PostIdsByBlogId get(post_ids_by_blog_id): map BlogId => Vec<PostId>;
+    pub CommentIdsByPostId get(comment_ids_by_post_id): map PostId => Vec<CommentId>;
 
-    pub ReactionIdsByPostId get(reaction_ids_by_post_id): map T::PostId => Vec<T::ReactionId>;
-    pub ReactionIdsByCommentId get(reaction_ids_by_comment_id): map T::CommentId => Vec<T::ReactionId>;
-    pub PostReactionIdByAccount get(post_reaction_id_by_account): map (T::AccountId, T::PostId) => T::ReactionId;
-    pub CommentReactionIdByAccount get(comment_reaction_id_by_account): map (T::AccountId, T::CommentId) => T::ReactionId;
+    pub ReactionIdsByPostId get(reaction_ids_by_post_id): map PostId => Vec<ReactionId>;
+    pub ReactionIdsByCommentId get(reaction_ids_by_comment_id): map CommentId => Vec<ReactionId>;
+    pub PostReactionIdByAccount get(post_reaction_id_by_account): map (T::AccountId, PostId) => ReactionId;
+    pub CommentReactionIdByAccount get(comment_reaction_id_by_account): map (T::AccountId, CommentId) => ReactionId;
 
-    pub BlogIdBySlug get(blog_id_by_slug): map Vec<u8> => Option<T::BlogId>;
+    pub BlogIdBySlug get(blog_id_by_slug): map Vec<u8> => Option<BlogId>;
 
-    pub BlogsFollowedByAccount get(blogs_followed_by_account): map T::AccountId => Vec<T::BlogId>;
-    pub BlogFollowers get(blog_followers): map T::BlogId => Vec<T::AccountId>;
-    pub BlogFollowedByAccount get(blog_followed_by_account): map (T::AccountId, T::BlogId) => bool;
+    pub BlogsFollowedByAccount get(blogs_followed_by_account): map T::AccountId => Vec<BlogId>;
+    pub BlogFollowers get(blog_followers): map BlogId => Vec<T::AccountId>;
+    pub BlogFollowedByAccount get(blog_followed_by_account): map (T::AccountId, BlogId) => bool;
 
     pub AccountFollowedByAccount get(account_followed_by_account): map (T::AccountId, T::AccountId) => bool;
     pub AccountsFollowedByAccount get(accounts_followed_by_account): map T::AccountId => Vec<T::AccountId>;
     pub AccountFollowers get(account_followers): map T::AccountId => Vec<T::AccountId>;
 
-    pub NextBlogId get(next_blog_id): T::BlogId = 1.into();
-    pub NextPostId get(next_post_id): T::PostId = 1.into();
-    pub NextCommentId get(next_comment_id): T::CommentId = 1.into();
-    pub NextReactionId get(next_reaction_id): T::ReactionId = 1.into();
+    pub NextBlogId get(next_blog_id): BlogId = 1;
+    pub NextPostId get(next_post_id): PostId = 1;
+    pub NextCommentId get(next_comment_id): CommentId = 1;
+    pub NextReactionId get(next_reaction_id): ReactionId = 1;
 
     pub AccountReputationDiffByAccount get(account_reputation_diff_by_account): map (T::AccountId, T::AccountId, ScoringAction) => Option<i16>; // TODO shorten name (?refactor)
-    pub PostScoreByAccount get(post_score_by_account): map (T::AccountId, T::PostId, ScoringAction) => Option<i16>;
-    pub CommentScoreByAccount get(comment_score_by_account): map (T::AccountId, T::CommentId, ScoringAction) => Option<i16>;
+    pub PostScoreByAccount get(post_score_by_account): map (T::AccountId, PostId, ScoringAction) => Option<i16>;
+    pub CommentScoreByAccount get(comment_score_by_account): map (T::AccountId, CommentId, ScoringAction) => Option<i16>;
 
-    pub PostSharesByAccount get(post_shares_by_account): map (T::AccountId, T::PostId) => u16;
-    pub SharedPostIdsByOriginalPostId get(shared_post_ids_by_original_post_id): map T::PostId => Vec<T::PostId>;
+    pub PostSharesByAccount get(post_shares_by_account): map (T::AccountId, PostId) => u16;
+    pub SharedPostIdsByOriginalPostId get(shared_post_ids_by_original_post_id): map PostId => Vec<PostId>;
 
-    pub CommentSharesByAccount get(comment_shares_by_account): map (T::AccountId, T::CommentId) => u16;
-    pub SharedPostIdsByOriginalCommentId get(shared_post_ids_by_original_comment_id): map T::CommentId => Vec<T::PostId>;
+    pub CommentSharesByAccount get(comment_shares_by_account): map (T::AccountId, CommentId) => u16;
+    pub SharedPostIdsByOriginalCommentId get(shared_post_ids_by_original_comment_id): map CommentId => Vec<PostId>;
 
     pub AccountByProfileUsername get(account_by_profile_username): map Vec<u8> => Option<T::AccountId>;
   }
@@ -304,7 +297,7 @@ decl_module! {
 
       ensure!(slug.len() >= Self::slug_min_len() as usize, MSG_BLOG_SLUG_IS_TOO_SHORT);
       ensure!(slug.len() <= Self::slug_max_len() as usize, MSG_BLOG_SLUG_IS_TOO_LONG);
-      ensure!(!<BlogIdBySlug<T>>::exists(slug.clone()), MSG_BLOG_SLUG_IS_NOT_UNIQUE);
+      ensure!(!BlogIdBySlug::exists(slug.clone()), MSG_BLOG_SLUG_IS_NOT_UNIQUE);
       // Self::is_ipfs_hash_valid(ipfs_hash.clone())?;
 
       let blog_id = Self::next_blog_id();
@@ -329,15 +322,15 @@ decl_module! {
       // Self::add_blog_follower_and_insert_blog(owner.clone(), new_blog, true)?;
 
       <BlogIdsByOwner<T>>::mutate(owner.clone(), |ids| ids.push(blog_id));
-      <BlogIdBySlug<T>>::insert(slug, blog_id);
-      <NextBlogId<T>>::mutate(|n| { *n += 1.into(); });
+      BlogIdBySlug::insert(slug, blog_id);
+      NextBlogId::mutate(|n| { *n += 1; });
     }
 
-    // pub fn update_blog(origin, blog_id: T::BlogId, update: BlogUpdate<T>) {}
+    // pub fn update_blog(origin, blog_id: BlogId, update: BlogUpdate<T>) {}
 
-    pub fn follow_blog(origin, blog_id: T::BlogId) {}
+    pub fn follow_blog(origin, blog_id: BlogId) {}
 
-    pub fn unfollow_blog(origin, blog_id: T::BlogId) {}
+    pub fn unfollow_blog(origin, blog_id: BlogId) {}
 
     pub fn follow_account(origin, account: T::AccountId) {}
 
@@ -347,35 +340,31 @@ decl_module! {
 
     pub fn update_profile(origin, update: ProfileUpdate) {}
 
-    // pub fn create_post(origin, blog_id: T::BlogId, ipfs_hash: Vec<u8>, extension: PostExtension<T>) {}
+    pub fn create_post(origin, blog_id: BlogId, ipfs_hash: Vec<u8>, extension: PostExtension) {}
 
-    // pub fn update_post(origin, post_id: T::PostId, update: PostUpdate<T>) {}
+    // pub fn update_post(origin, post_id: PostId, update: PostUpdate<T>) {}
 
-    pub fn create_comment(origin, post_id: T::PostId, parent_id: Option<T::CommentId>, ipfs_hash: Vec<u8>) {}
+    pub fn create_comment(origin, post_id: PostId, parent_id: Option<CommentId>, ipfs_hash: Vec<u8>) {}
 
-    pub fn update_comment(origin, comment_id: T::CommentId, update: CommentUpdate) {}
+    pub fn update_comment(origin, comment_id: CommentId, update: CommentUpdate) {}
 
-    pub fn create_post_reaction(origin, post_id: T::PostId, kind: ReactionKind) {}
+    pub fn create_post_reaction(origin, post_id: PostId, kind: ReactionKind) {}
 
-    pub fn update_post_reaction(origin, post_id: T::PostId, reaction_id: T::ReactionId, new_kind: ReactionKind) {}
+    pub fn update_post_reaction(origin, post_id: PostId, reaction_id: ReactionId, new_kind: ReactionKind) {}
 
-    pub fn delete_post_reaction(origin, post_id: T::PostId, reaction_id: T::ReactionId) {}
+    pub fn delete_post_reaction(origin, post_id: PostId, reaction_id: ReactionId) {}
 
-    pub fn create_comment_reaction(origin, comment_id: T::CommentId, kind: ReactionKind) {}
+    pub fn create_comment_reaction(origin, comment_id: CommentId, kind: ReactionKind) {}
 
-    pub fn update_comment_reaction(origin, comment_id: T::CommentId, reaction_id: T::ReactionId, new_kind: ReactionKind) {}
+    pub fn update_comment_reaction(origin, comment_id: CommentId, reaction_id: ReactionId, new_kind: ReactionKind) {}
 
-    pub fn delete_comment_reaction(origin, comment_id: T::CommentId, reaction_id: T::ReactionId) {}
+    pub fn delete_comment_reaction(origin, comment_id: CommentId, reaction_id: ReactionId) {}
   }
 }
 
 decl_event!(
   pub enum Event<T> where
     <T as system::Trait>::AccountId,
-    <T as Trait>::BlogId,
-    <T as Trait>::PostId,
-    <T as Trait>::CommentId,
-    <T as Trait>::ReactionId,
    {
     BlogCreated(AccountId, BlogId),
     BlogUpdated(AccountId, BlogId),
