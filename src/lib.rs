@@ -5,6 +5,7 @@
 
 pub mod defaults;
 pub mod messages;
+pub mod functions;
 
 use sp_std::prelude::*;
 use codec::{Encode, Decode};
@@ -89,7 +90,7 @@ pub struct PostHistoryRecord<T: Trait> {
   pub old_data: PostUpdate,
 }
 
-#[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug)]
+#[derive(Encode, Decode, Clone, Copy, Eq, PartialEq, RuntimeDebug)]
 pub enum PostExtension {
   RegularPost,
   SharedPost(PostId),
@@ -134,7 +135,7 @@ pub struct CommentHistoryRecord<T: Trait> {
   pub old_data: CommentUpdate,
 }
 
-#[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug)]
+#[derive(Encode, Decode, Clone, Copy, Eq, PartialEq, RuntimeDebug)]
 pub enum ReactionKind {
   Upvote,
   Downvote,
@@ -186,7 +187,7 @@ pub struct ProfileHistoryRecord<T: Trait> {
   pub old_data: ProfileUpdate,
 }
 
-#[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug)]
+#[derive(Encode, Decode, Clone, Copy, Eq, PartialEq, RuntimeDebug)]
 pub enum ScoringAction {
   UpvotePost,
   DownvotePost,
@@ -299,16 +300,12 @@ decl_module! {
       ensure!(slug.len() >= Self::slug_min_len() as usize, MSG_BLOG_SLUG_IS_TOO_SHORT);
       ensure!(slug.len() <= Self::slug_max_len() as usize, MSG_BLOG_SLUG_IS_TOO_LONG);
       ensure!(!BlogIdBySlug::exists(slug.clone()), MSG_BLOG_SLUG_IS_NOT_UNIQUE);
-      // Self::is_ipfs_hash_valid(ipfs_hash.clone())?;
+      Self::is_ipfs_hash_valid(ipfs_hash.clone())?;
 
       let blog_id = Self::next_blog_id();
       let ref mut new_blog: Blog<T> = Blog {
         id: blog_id,
-        created: Change {
-          account: owner.clone(),
-          block: <system::Module<T>>::block_number(),
-          time: <pallet_timestamp::Module<T>>::now(),
-        },
+        created: Self::new_change(owner.clone()),
         updated: None,
         writers: vec![],
         slug: slug.clone(),
@@ -320,14 +317,14 @@ decl_module! {
       };
 
       // Blog creator automatically follows their blog:
-      // Self::add_blog_follower_and_insert_blog(owner.clone(), new_blog, true)?;
+      Self::add_blog_follower_and_insert_blog(owner.clone(), new_blog, true)?;
 
       <BlogIdsByOwner<T>>::mutate(owner.clone(), |ids| ids.push(blog_id));
       BlogIdBySlug::insert(slug, blog_id);
       NextBlogId::mutate(|n| { *n += 1; });
     }
 
-    pub fn update_blog(origin, blog_id: BlogId, update: BlogUpdate<T::AccountId>) {}
+    /*pub fn update_blog(origin, blog_id: BlogId, update: BlogUpdate<T::AccountId>) {}
 
     pub fn follow_blog(origin, blog_id: BlogId) {}
 
@@ -359,7 +356,7 @@ decl_module! {
 
     pub fn update_comment_reaction(origin, comment_id: CommentId, reaction_id: ReactionId, new_kind: ReactionKind) {}
 
-    pub fn delete_comment_reaction(origin, comment_id: CommentId, reaction_id: ReactionId) {}
+    pub fn delete_comment_reaction(origin, comment_id: CommentId, reaction_id: ReactionId) {}*/
   }
 }
 
