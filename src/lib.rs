@@ -8,23 +8,20 @@ pub mod defaults;
 use sp_std::prelude::*;
 use codec::{Encode, Decode};
 use frame_support::{decl_module, decl_storage, decl_event, Parameter};
-use sp_runtime::traits::{Member, SimpleArithmetic};
+use sp_runtime::{traits::{Member, SimpleArithmetic}, RuntimeDebug};
 use system::ensure_signed;
 use pallet_timestamp;
 
 use defaults::*;
-use serde::export::{Into, From, Default, Option};
 
-#[cfg_attr(feature = "std", derive(Debug))]
-#[derive(Encode, Decode, Clone, Eq, PartialEq)]
+#[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug)]
 pub struct Change<T: Trait> {
   pub account: T::AccountId,
   pub block: T::BlockNumber,
   pub time: T::Moment,
 }
 
-#[cfg_attr(feature = "std", derive(Debug))]
-#[derive(Encode, Decode, Clone, Eq, PartialEq)]
+#[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug)]
 pub struct Blog<T: Trait> {
   pub id: T::BlogId,
   pub created: Change<T>,
@@ -43,23 +40,20 @@ pub struct Blog<T: Trait> {
   pub score: i32,
 }
 
-#[cfg_attr(feature = "std", derive(Debug))]
-#[derive(Encode, Decode, Clone, Eq, PartialEq)]
+#[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug)]
 pub struct BlogUpdate<T: Trait> {
   pub writers: Option<Vec<T::AccountId>>,
   pub slug: Option<Vec<u8>>,
   pub ipfs_hash: Option<Vec<u8>>,
 }
 
-#[cfg_attr(feature = "std", derive(Debug))]
-#[derive(Encode, Decode, Clone, Eq, PartialEq)]
+#[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug)]
 pub struct BlogHistoryRecord<T: Trait> {
   pub edited: Change<T>,
   pub old_data: BlogUpdate<T>,
 }
 
-#[cfg_attr(feature = "std", derive(Debug))]
-#[derive(Encode, Decode, Clone, Eq, PartialEq)]
+#[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug)]
 pub struct Post<T: Trait> {
   pub id: T::PostId,
   pub blog_id: T::BlogId,
@@ -81,22 +75,19 @@ pub struct Post<T: Trait> {
   pub score: i32,
 }
 
-#[cfg_attr(feature = "std", derive(Debug))]
-#[derive(Encode, Decode, Clone, Eq, PartialEq)]
+#[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug)]
 pub struct PostUpdate<T: Trait> {
   pub blog_id: Option<T::BlogId>,
   pub ipfs_hash: Option<Vec<u8>>,
 }
 
-#[cfg_attr(feature = "std", derive(Debug))]
-#[derive(Encode, Decode, Clone, Eq, PartialEq)]
+#[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug)]
 pub struct PostHistoryRecord<T: Trait> {
   pub edited: Change<T>,
   pub old_data: PostUpdate<T>,
 }
 
-#[cfg_attr(feature = "std", derive(Debug))]
-#[derive(Encode, Decode, Clone, Eq, PartialEq)]
+#[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug)]
 pub enum PostExtension<T: Trait> {
   RegularPost,
   SharedPost(T::PostId),
@@ -109,8 +100,7 @@ impl<T: Trait> Default for PostExtension<T> {
   }
 }
 
-#[cfg_attr(feature = "std", derive(Debug))]
-#[derive(Encode, Decode, Clone, Eq, PartialEq)]
+#[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug)]
 pub struct Comment<T: Trait> {
   pub id: T::CommentId,
   pub parent_id: Option<T::CommentId>,
@@ -131,21 +121,18 @@ pub struct Comment<T: Trait> {
   pub score: i32,
 }
 
-#[cfg_attr(feature = "std", derive(Debug))]
-#[derive(Encode, Decode, Clone, Eq, PartialEq)]
+#[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug)]
 pub struct CommentUpdate {
   pub ipfs_hash: Vec<u8>,
 }
 
-#[cfg_attr(feature = "std", derive(Debug))]
-#[derive(Encode, Decode, Clone, Eq, PartialEq)]
+#[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug)]
 pub struct CommentHistoryRecord<T: Trait> {
   pub edited: Change<T>,
   pub old_data: CommentUpdate,
 }
 
-#[cfg_attr(feature = "std", derive(Debug))]
-#[derive(Encode, Decode, Clone, Eq, PartialEq)]
+#[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug)]
 pub enum ReactionKind {
   Upvote,
   Downvote,
@@ -157,8 +144,7 @@ impl Default for ReactionKind {
   }
 }
 
-#[cfg_attr(feature = "std", derive(Debug))]
-#[derive(Encode, Decode, Clone, Eq, PartialEq)]
+#[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug)]
 pub struct Reaction<T: Trait> {
   pub id: T::ReactionId,
   pub created: Change<T>,
@@ -166,8 +152,7 @@ pub struct Reaction<T: Trait> {
   pub kind: ReactionKind,
 }
 
-#[cfg_attr(feature = "std", derive(Debug))]
-#[derive(Encode, Decode, Clone, Eq, PartialEq)]
+#[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug)]
 pub struct SocialAccount<T: Trait> {
   pub followers_count: u32,
   pub following_accounts_count: u16,
@@ -176,8 +161,7 @@ pub struct SocialAccount<T: Trait> {
   pub profile: Option<Profile<T>>,
 }
 
-#[cfg_attr(feature = "std", derive(Debug))]
-#[derive(Encode, Decode, Clone, Eq, PartialEq)]
+#[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug)]
 pub struct Profile<T: Trait> {
   pub created: Change<T>,
   pub updated: Option<Change<T>>,
@@ -188,22 +172,19 @@ pub struct Profile<T: Trait> {
   pub edit_history: Vec<ProfileHistoryRecord<T>>,
 }
 
-#[cfg_attr(feature = "std", derive(Debug))]
-#[derive(Encode, Decode, Clone, Eq, PartialEq)]
+#[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug)]
 pub struct ProfileUpdate {
   pub username: Option<Vec<u8>>,
   pub ipfs_hash: Option<Vec<u8>>,
 }
 
-#[cfg_attr(feature = "std", derive(Debug))]
-#[derive(Encode, Decode, Clone, Eq, PartialEq)]
+#[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug)]
 pub struct ProfileHistoryRecord<T: Trait> {
   pub edited: Change<T>,
   pub old_data: ProfileUpdate,
 }
 
-#[cfg_attr(feature = "std", derive(Debug))]
-#[derive(Encode, Decode, Clone, Eq, PartialEq)]
+#[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug)]
 pub enum ScoringAction {
   UpvotePost,
   DownvotePost,
@@ -225,16 +206,16 @@ impl Default for ScoringAction {
 /// The pallet's configuration trait.
 pub trait Trait: system::Trait + pallet_timestamp::Trait {
   type BlogId: Parameter + Member + SimpleArithmetic + Default + Copy
-  + From<usize> + From<u64>;
+  /*+ From<usize>*/ + From<u64>;
 
   type PostId: Parameter + Member + SimpleArithmetic + Default + Copy
-  + From<usize> + From<u64>;
+  /*+ From<usize>*/ + From<u64>;
 
   type CommentId: Parameter + Member + SimpleArithmetic + Default + Copy
-  + From<usize> + From<u64>;
+  /*+ From<usize>*/ + From<u64>;
 
   type ReactionId: Parameter + Member + SimpleArithmetic + Default + Copy
-  + From<usize> + From<u64>;
+  /*+ From<usize>*/ + From<u64>;
 
   /// The overarching event type.
   type Event: From<Event<Self>> + Into<<Self as system::Trait>::Event>;
