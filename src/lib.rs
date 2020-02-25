@@ -4,15 +4,17 @@
 /// https://github.com/paritytech/substrate/blob/master/frame/example/src/lib.rs
 
 pub mod defaults;
+pub mod messages;
 
 use sp_std::prelude::*;
 use codec::{Encode, Decode};
-use frame_support::{decl_module, decl_storage, decl_event, Parameter};
+use frame_support::{decl_module, decl_storage, decl_event, Parameter, ensure};
 use sp_runtime::{traits::{Member, SimpleArithmetic}, RuntimeDebug};
 use system::ensure_signed;
 use pallet_timestamp;
 
 use defaults::*;
+use messages::*;
 
 #[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug)]
 pub struct Change<T: Trait> {
@@ -298,7 +300,37 @@ decl_module! {
     fn deposit_event() = default;
 
     pub fn create_blog(origin, slug: Vec<u8>, ipfs_hash: Vec<u8>) {
-      ensure_signed(origin)?;
+      let owner = ensure_signed(origin)?;
+
+      ensure!(slug.len() >= Self::slug_min_len() as usize, MSG_BLOG_SLUG_IS_TOO_SHORT);
+      ensure!(slug.len() <= Self::slug_max_len() as usize, MSG_BLOG_SLUG_IS_TOO_LONG);
+      ensure!(!<BlogIdBySlug<T>>::exists(slug.clone()), MSG_BLOG_SLUG_IS_NOT_UNIQUE);
+      // Self::is_ipfs_hash_valid(ipfs_hash.clone())?;
+
+      let blog_id = Self::next_blog_id();
+      let ref mut new_blog: Blog<T> = Blog {
+        id: blog_id,
+        created: Change {
+          account: owner.clone(),
+          block: <system::Module<T>>::block_number(),
+          time: <pallet_timestamp::Module<T>>::now(),
+        },
+        updated: None,
+        writers: vec![],
+        slug: slug.clone(),
+        ipfs_hash,
+        posts_count: 0,
+        followers_count: 0,
+        edit_history: vec![],
+        score: 0
+      };
+
+      // Blog creator automatically follows their blog:
+      // Self::add_blog_follower_and_insert_blog(owner.clone(), new_blog, true)?;
+
+      <BlogIdsByOwner<T>>::mutate(owner.clone(), |ids| ids.push(blog_id));
+      <BlogIdBySlug<T>>::insert(slug, blog_id);
+      <NextBlogId<T>>::mutate(|n| { *n += 1.into(); });
     }
 
     // pub fn update_blog(origin, blog_id: T::BlogId, update: BlogUpdate<T>) {}
