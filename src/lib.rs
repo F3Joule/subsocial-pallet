@@ -43,8 +43,8 @@ pub struct Blog<T: Trait> {
 }
 
 #[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug)]
-pub struct BlogUpdate<T: Trait> {
-  pub writers: Option<Vec<T::AccountId>>,
+pub struct BlogUpdate<AccountId> {
+  pub writers: Option<Vec<AccountId>>,
   pub slug: Option<Vec<u8>>,
   pub ipfs_hash: Option<Vec<u8>>,
 }
@@ -52,7 +52,7 @@ pub struct BlogUpdate<T: Trait> {
 #[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug)]
 pub struct BlogHistoryRecord<T: Trait> {
   pub edited: Change<T>,
-  pub old_data: BlogUpdate<T>,
+  pub old_data: BlogUpdate<T::AccountId>,
 }
 
 #[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug)]
@@ -288,6 +288,7 @@ decl_storage! {
 // The pallet's dispatchable functions.
 decl_module! {
   pub struct Module<T: Trait> for enum Call where origin: T::Origin {
+
     // Initializing events
     // this is needed only if you are using events in your pallet
     fn deposit_event() = default;
@@ -326,7 +327,7 @@ decl_module! {
       NextBlogId::mutate(|n| { *n += 1; });
     }
 
-    // pub fn update_blog(origin, blog_id: BlogId, update: BlogUpdate<T>) {}
+    pub fn update_blog(origin, blog_id: BlogId, update: BlogUpdate<T::AccountId>) {}
 
     pub fn follow_blog(origin, blog_id: BlogId) {}
 
@@ -342,7 +343,7 @@ decl_module! {
 
     pub fn create_post(origin, blog_id: BlogId, ipfs_hash: Vec<u8>, extension: PostExtension) {}
 
-    // pub fn update_post(origin, post_id: PostId, update: PostUpdate<T>) {}
+    pub fn update_post(origin, post_id: PostId, update: PostUpdate) {}
 
     pub fn create_comment(origin, post_id: PostId, parent_id: Option<CommentId>, ipfs_hash: Vec<u8>) {}
 
