@@ -9,10 +9,11 @@ use sp_std::prelude::*;
 use codec::{Encode, Decode};
 use frame_support::{decl_module, decl_storage, decl_event, Parameter};
 use sp_runtime::traits::{Member, SimpleArithmetic};
-// use system::ensure_signed;
+use system::ensure_signed;
 use pallet_timestamp;
 
 use defaults::*;
+use serde::export::{Into, From, Default, Option};
 
 #[cfg_attr(feature = "std", derive(Debug))]
 #[derive(Encode, Decode, Clone, Eq, PartialEq)]
@@ -314,80 +315,86 @@ decl_module! {
     // Initializing events
     // this is needed only if you are using events in your pallet
     fn deposit_event() = default;
+
+    pub fn create_blog(origin, slug: Vec<u8>, ipfs_hash: Vec<u8>) {
+      ensure_signed(origin)?;
+    }
+
+    // pub fn update_blog(origin, blog_id: T::BlogId, update: BlogUpdate<T>) {}
+
+    pub fn follow_blog(origin, blog_id: T::BlogId) {}
+
+    pub fn unfollow_blog(origin, blog_id: T::BlogId) {}
+
+    pub fn follow_account(origin, account: T::AccountId) {}
+
+    pub fn unfollow_account(origin, account: T::AccountId) {}
+
+    pub fn create_profile(origin, username: Vec<u8>, ipfs_hash: Vec<u8>) {}
+
+    pub fn update_profile(origin, update: ProfileUpdate) {}
+
+    // pub fn create_post(origin, blog_id: T::BlogId, ipfs_hash: Vec<u8>, extension: PostExtension<T>) {}
+
+    // pub fn update_post(origin, post_id: T::PostId, update: PostUpdate<T>) {}
+
+    pub fn create_comment(origin, post_id: T::PostId, parent_id: Option<T::CommentId>, ipfs_hash: Vec<u8>) {}
+
+    pub fn update_comment(origin, comment_id: T::CommentId, update: CommentUpdate) {}
+
+    pub fn create_post_reaction(origin, post_id: T::PostId, kind: ReactionKind) {}
+
+    pub fn update_post_reaction(origin, post_id: T::PostId, reaction_id: T::ReactionId, new_kind: ReactionKind) {}
+
+    pub fn delete_post_reaction(origin, post_id: T::PostId, reaction_id: T::ReactionId) {}
+
+    pub fn create_comment_reaction(origin, comment_id: T::CommentId, kind: ReactionKind) {}
+
+    pub fn update_comment_reaction(origin, comment_id: T::CommentId, reaction_id: T::ReactionId, new_kind: ReactionKind) {}
+
+    pub fn delete_comment_reaction(origin, comment_id: T::CommentId, reaction_id: T::ReactionId) {}
   }
 }
 
 decl_event!(
-  pub enum Event<T> where AccountId = <T as system::Trait>::AccountId {
-    EmptyEvent(AccountId),
+  pub enum Event<T> where
+    <T as system::Trait>::AccountId,
+    <T as Trait>::BlogId,
+    <T as Trait>::PostId,
+    <T as Trait>::CommentId,
+    <T as Trait>::ReactionId,
+   {
+    BlogCreated(AccountId, BlogId),
+    BlogUpdated(AccountId, BlogId),
+    BlogDeleted(AccountId, BlogId),
+
+    BlogFollowed(AccountId, BlogId),
+    BlogUnfollowed(AccountId, BlogId),
+
+    AccountReputationChanged(AccountId, ScoringAction, u32),
+
+    AccountFollowed(AccountId, AccountId),
+    AccountUnfollowed(AccountId, AccountId),
+
+    PostCreated(AccountId, PostId),
+    PostUpdated(AccountId, PostId),
+    PostDeleted(AccountId, PostId),
+    PostShared(AccountId, PostId),
+
+    CommentCreated(AccountId, CommentId),
+    CommentUpdated(AccountId, CommentId),
+    CommentDeleted(AccountId, CommentId),
+    CommentShared(AccountId, CommentId),
+
+    PostReactionCreated(AccountId, PostId, ReactionId),
+    PostReactionUpdated(AccountId, PostId, ReactionId),
+    PostReactionDeleted(AccountId, PostId, ReactionId),
+
+    CommentReactionCreated(AccountId, CommentId, ReactionId),
+    CommentReactionUpdated(AccountId, CommentId, ReactionId),
+    CommentReactionDeleted(AccountId, CommentId, ReactionId),
+
+    ProfileCreated(AccountId),
+    ProfileUpdated(AccountId),
   }
 );
-
-/// tests for this pallet
-#[cfg(test)]
-mod tests {
-  use super::*;
-
-  use sp_core::H256;
-  use frame_support::{impl_outer_origin, assert_ok, parameter_types, weights::Weight};
-  use sp_runtime::{
-    traits::{BlakeTwo256, IdentityLookup}, testing::Header, Perbill,
-  };
-
-  impl_outer_origin! {
-		pub enum Origin for Test {}
-	}
-
-  // For testing the pallet, we construct most of a mock runtime. This means
-  // first constructing a configuration type (`Test`) which `impl`s each of the
-  // configuration traits of modules we want to use.
-  #[derive(Clone, Eq, PartialEq)]
-  pub struct Test;
-  parameter_types! {
-		pub const BlockHashCount: u64 = 250;
-		pub const MaximumBlockWeight: Weight = 1024;
-		pub const MaximumBlockLength: u32 = 2 * 1024;
-		pub const AvailableBlockRatio: Perbill = Perbill::from_percent(75);
-	}
-  impl system::Trait for Test {
-    type Origin = Origin;
-    type Call = ();
-    type Index = u64;
-    type BlockNumber = u64;
-    type Hash = H256;
-    type Hashing = BlakeTwo256;
-    type AccountId = u64;
-    type Lookup = IdentityLookup<Self::AccountId>;
-    type Header = Header;
-    type Event = ();
-    type BlockHashCount = BlockHashCount;
-    type MaximumBlockWeight = MaximumBlockWeight;
-    type MaximumBlockLength = MaximumBlockLength;
-    type AvailableBlockRatio = AvailableBlockRatio;
-    type Version = ();
-    type ModuleToIndex = ();
-  }
-
-  impl Trait for Test {
-    type Event = ();
-  }
-
-  type TemplateModule = Module<Test>;
-
-  // This function basically just builds a genesis storage key/value store according to
-  // our desired mockup.
-  fn new_test_ext() -> sp_io::TestExternalities {
-    system::GenesisConfig::default().build_storage::<Test>().unwrap().into()
-  }
-
-  #[test]
-  fn it_works_for_default_value() {
-    new_test_ext().execute_with(|| {
-      // Just a dummy test for the dummy funtion `do_something`
-      // calling the `do_something` function with a value 42
-      assert_ok!(TemplateModule::do_something(Origin::signed(1), 42));
-      // asserting that the stored value is equal to what we stored
-      assert_eq!(TemplateModule::something(), Some(42));
-    });
-  }
-}
