@@ -5,11 +5,12 @@
 
 pub mod defaults;
 pub mod messages;
+pub mod functions;
 
 use sp_std::prelude::*;
 use codec::{Encode, Decode};
-use frame_support::{decl_module, decl_storage, decl_event, Parameter, ensure};
-use sp_runtime::{traits::{Member, SimpleArithmetic}, RuntimeDebug};
+use frame_support::{decl_module, decl_storage, decl_event, ensure};
+use sp_runtime::{RuntimeDebug};
 use system::ensure_signed;
 use pallet_timestamp;
 
@@ -25,7 +26,7 @@ pub struct Change<T: Trait> {
 
 #[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug)]
 pub struct Blog<T: Trait> {
-  pub id: T::BlogId,
+  pub id: BlogId,
   pub created: Change<T>,
   pub updated: Option<Change<T>>,
 
@@ -43,8 +44,8 @@ pub struct Blog<T: Trait> {
 }
 
 #[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug)]
-pub struct BlogUpdate<T: Trait> {
-  pub writers: Option<Vec<T::AccountId>>,
+pub struct BlogUpdate<AccountId> {
+  pub writers: Option<Vec<AccountId>>,
   pub slug: Option<Vec<u8>>,
   pub ipfs_hash: Option<Vec<u8>>,
 }
@@ -52,16 +53,16 @@ pub struct BlogUpdate<T: Trait> {
 #[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug)]
 pub struct BlogHistoryRecord<T: Trait> {
   pub edited: Change<T>,
-  pub old_data: BlogUpdate<T>,
+  pub old_data: BlogUpdate<T::AccountId>,
 }
 
 #[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug)]
 pub struct Post<T: Trait> {
-  pub id: T::PostId,
-  pub blog_id: T::BlogId,
+  pub id: PostId,
+  pub blog_id: BlogId,
   pub created: Change<T>,
   pub updated: Option<Change<T>>,
-  pub extension: PostExtension<T>,
+  pub extension: PostExtension,
 
   // Next fields can be updated by the owner only:
 
@@ -78,25 +79,25 @@ pub struct Post<T: Trait> {
 }
 
 #[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug)]
-pub struct PostUpdate<T: Trait> {
-  pub blog_id: Option<T::BlogId>,
+pub struct PostUpdate {
+  pub blog_id: Option<BlogId>,
   pub ipfs_hash: Option<Vec<u8>>,
 }
 
 #[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug)]
 pub struct PostHistoryRecord<T: Trait> {
   pub edited: Change<T>,
-  pub old_data: PostUpdate<T>,
+  pub old_data: PostUpdate,
 }
 
-#[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug)]
-pub enum PostExtension<T: Trait> {
+#[derive(Encode, Decode, Clone, Copy, Eq, PartialEq, RuntimeDebug)]
+pub enum PostExtension {
   RegularPost,
-  SharedPost(T::PostId),
-  SharedComment(T::CommentId),
+  SharedPost(PostId),
+  SharedComment(CommentId),
 }
 
-impl<T: Trait> Default for PostExtension<T> {
+impl Default for PostExtension {
   fn default() -> Self {
     PostExtension::RegularPost
   }
@@ -104,9 +105,9 @@ impl<T: Trait> Default for PostExtension<T> {
 
 #[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug)]
 pub struct Comment<T: Trait> {
-  pub id: T::CommentId,
-  pub parent_id: Option<T::CommentId>,
-  pub post_id: T::PostId,
+  pub id: CommentId,
+  pub parent_id: Option<CommentId>,
+  pub post_id: PostId,
   pub created: Change<T>,
   pub updated: Option<Change<T>>,
 
@@ -134,7 +135,7 @@ pub struct CommentHistoryRecord<T: Trait> {
   pub old_data: CommentUpdate,
 }
 
-#[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug)]
+#[derive(Encode, Decode, Clone, Copy, Eq, PartialEq, RuntimeDebug)]
 pub enum ReactionKind {
   Upvote,
   Downvote,
@@ -148,7 +149,7 @@ impl Default for ReactionKind {
 
 #[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug)]
 pub struct Reaction<T: Trait> {
-  pub id: T::ReactionId,
+  pub id: ReactionId,
   pub created: Change<T>,
   pub updated: Option<Change<T>>,
   pub kind: ReactionKind,
@@ -186,7 +187,7 @@ pub struct ProfileHistoryRecord<T: Trait> {
   pub old_data: ProfileUpdate,
 }
 
-#[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug)]
+#[derive(Encode, Decode, Clone, Copy, Eq, PartialEq, RuntimeDebug)]
 pub enum ScoringAction {
   UpvotePost,
   DownvotePost,
@@ -205,20 +206,13 @@ impl Default for ScoringAction {
   }
 }
 
+pub type BlogId = u64;
+pub type PostId = u64;
+pub type CommentId = u64;
+pub type ReactionId = u64;
+
 /// The pallet's configuration trait.
 pub trait Trait: system::Trait + pallet_timestamp::Trait {
-  type BlogId: Parameter + Member + SimpleArithmetic + Default + Copy
-  /*+ From<usize>*/ + From<u64>;
-
-  type PostId: Parameter + Member + SimpleArithmetic + Default + Copy
-  /*+ From<usize>*/ + From<u64>;
-
-  type CommentId: Parameter + Member + SimpleArithmetic + Default + Copy
-  /*+ From<usize>*/ + From<u64>;
-
-  type ReactionId: Parameter + Member + SimpleArithmetic + Default + Copy
-  /*+ From<usize>*/ + From<u64>;
-
   /// The overarching event type.
   type Event: From<Event<Self>> + Into<<Self as system::Trait>::Event>;
 }
@@ -248,45 +242,45 @@ decl_storage! {
     pub FollowBlogActionWeight get (follow_blog_action_weight): i16 = DEFAULT_FOLLOW_BLOG_ACTION_WEIGHT;
     pub FollowAccountActionWeight get (follow_account_action_weight): i16 = DEFAULT_FOLLOW_ACCOUNT_ACTION_WEIGHT;
 
-    pub BlogById get(blog_by_id): map T::BlogId => Option<Blog<T>>;
-    pub PostById get(post_by_id): map T::PostId => Option<Post<T>>;
-    pub CommentById get(comment_by_id): map T::CommentId => Option<Comment<T>>;
-    pub ReactionById get(reaction_by_id): map T::ReactionId => Option<Reaction<T>>;
+    pub BlogById get(blog_by_id): map BlogId => Option<Blog<T>>;
+    pub PostById get(post_by_id): map PostId => Option<Post<T>>;
+    pub CommentById get(comment_by_id): map CommentId => Option<Comment<T>>;
+    pub ReactionById get(reaction_by_id): map ReactionId => Option<Reaction<T>>;
     pub SocialAccountById get(social_account_by_id): map T::AccountId => Option<SocialAccount<T>>;
 
-    pub BlogIdsByOwner get(blog_ids_by_owner): map T::AccountId => Vec<T::BlogId>;
-    pub PostIdsByBlogId get(post_ids_by_blog_id): map T::BlogId => Vec<T::PostId>;
-    pub CommentIdsByPostId get(comment_ids_by_post_id): map T::PostId => Vec<T::CommentId>;
+    pub BlogIdsByOwner get(blog_ids_by_owner): map T::AccountId => Vec<BlogId>;
+    pub PostIdsByBlogId get(post_ids_by_blog_id): map BlogId => Vec<PostId>;
+    pub CommentIdsByPostId get(comment_ids_by_post_id): map PostId => Vec<CommentId>;
 
-    pub ReactionIdsByPostId get(reaction_ids_by_post_id): map T::PostId => Vec<T::ReactionId>;
-    pub ReactionIdsByCommentId get(reaction_ids_by_comment_id): map T::CommentId => Vec<T::ReactionId>;
-    pub PostReactionIdByAccount get(post_reaction_id_by_account): map (T::AccountId, T::PostId) => T::ReactionId;
-    pub CommentReactionIdByAccount get(comment_reaction_id_by_account): map (T::AccountId, T::CommentId) => T::ReactionId;
+    pub ReactionIdsByPostId get(reaction_ids_by_post_id): map PostId => Vec<ReactionId>;
+    pub ReactionIdsByCommentId get(reaction_ids_by_comment_id): map CommentId => Vec<ReactionId>;
+    pub PostReactionIdByAccount get(post_reaction_id_by_account): map (T::AccountId, PostId) => ReactionId;
+    pub CommentReactionIdByAccount get(comment_reaction_id_by_account): map (T::AccountId, CommentId) => ReactionId;
 
-    pub BlogIdBySlug get(blog_id_by_slug): map Vec<u8> => Option<T::BlogId>;
+    pub BlogIdBySlug get(blog_id_by_slug): map Vec<u8> => Option<BlogId>;
 
-    pub BlogsFollowedByAccount get(blogs_followed_by_account): map T::AccountId => Vec<T::BlogId>;
-    pub BlogFollowers get(blog_followers): map T::BlogId => Vec<T::AccountId>;
-    pub BlogFollowedByAccount get(blog_followed_by_account): map (T::AccountId, T::BlogId) => bool;
+    pub BlogsFollowedByAccount get(blogs_followed_by_account): map T::AccountId => Vec<BlogId>;
+    pub BlogFollowers get(blog_followers): map BlogId => Vec<T::AccountId>;
+    pub BlogFollowedByAccount get(blog_followed_by_account): map (T::AccountId, BlogId) => bool;
 
     pub AccountFollowedByAccount get(account_followed_by_account): map (T::AccountId, T::AccountId) => bool;
     pub AccountsFollowedByAccount get(accounts_followed_by_account): map T::AccountId => Vec<T::AccountId>;
     pub AccountFollowers get(account_followers): map T::AccountId => Vec<T::AccountId>;
 
-    pub NextBlogId get(next_blog_id): T::BlogId = 1.into();
-    pub NextPostId get(next_post_id): T::PostId = 1.into();
-    pub NextCommentId get(next_comment_id): T::CommentId = 1.into();
-    pub NextReactionId get(next_reaction_id): T::ReactionId = 1.into();
+    pub NextBlogId get(next_blog_id): BlogId = 1;
+    pub NextPostId get(next_post_id): PostId = 1;
+    pub NextCommentId get(next_comment_id): CommentId = 1;
+    pub NextReactionId get(next_reaction_id): ReactionId = 1;
 
     pub AccountReputationDiffByAccount get(account_reputation_diff_by_account): map (T::AccountId, T::AccountId, ScoringAction) => Option<i16>; // TODO shorten name (?refactor)
-    pub PostScoreByAccount get(post_score_by_account): map (T::AccountId, T::PostId, ScoringAction) => Option<i16>;
-    pub CommentScoreByAccount get(comment_score_by_account): map (T::AccountId, T::CommentId, ScoringAction) => Option<i16>;
+    pub PostScoreByAccount get(post_score_by_account): map (T::AccountId, PostId, ScoringAction) => Option<i16>;
+    pub CommentScoreByAccount get(comment_score_by_account): map (T::AccountId, CommentId, ScoringAction) => Option<i16>;
 
-    pub PostSharesByAccount get(post_shares_by_account): map (T::AccountId, T::PostId) => u16;
-    pub SharedPostIdsByOriginalPostId get(shared_post_ids_by_original_post_id): map T::PostId => Vec<T::PostId>;
+    pub PostSharesByAccount get(post_shares_by_account): map (T::AccountId, PostId) => u16;
+    pub SharedPostIdsByOriginalPostId get(shared_post_ids_by_original_post_id): map PostId => Vec<PostId>;
 
-    pub CommentSharesByAccount get(comment_shares_by_account): map (T::AccountId, T::CommentId) => u16;
-    pub SharedPostIdsByOriginalCommentId get(shared_post_ids_by_original_comment_id): map T::CommentId => Vec<T::PostId>;
+    pub CommentSharesByAccount get(comment_shares_by_account): map (T::AccountId, CommentId) => u16;
+    pub SharedPostIdsByOriginalCommentId get(shared_post_ids_by_original_comment_id): map CommentId => Vec<PostId>;
 
     pub AccountByProfileUsername get(account_by_profile_username): map Vec<u8> => Option<T::AccountId>;
   }
@@ -295,6 +289,7 @@ decl_storage! {
 // The pallet's dispatchable functions.
 decl_module! {
   pub struct Module<T: Trait> for enum Call where origin: T::Origin {
+
     // Initializing events
     // this is needed only if you are using events in your pallet
     fn deposit_event() = default;
@@ -304,17 +299,13 @@ decl_module! {
 
       ensure!(slug.len() >= Self::slug_min_len() as usize, MSG_BLOG_SLUG_IS_TOO_SHORT);
       ensure!(slug.len() <= Self::slug_max_len() as usize, MSG_BLOG_SLUG_IS_TOO_LONG);
-      ensure!(!<BlogIdBySlug<T>>::exists(slug.clone()), MSG_BLOG_SLUG_IS_NOT_UNIQUE);
-      // Self::is_ipfs_hash_valid(ipfs_hash.clone())?;
+      ensure!(!BlogIdBySlug::exists(slug.clone()), MSG_BLOG_SLUG_IS_NOT_UNIQUE);
+      Self::is_ipfs_hash_valid(ipfs_hash.clone())?;
 
       let blog_id = Self::next_blog_id();
       let ref mut new_blog: Blog<T> = Blog {
         id: blog_id,
-        created: Change {
-          account: owner.clone(),
-          block: <system::Module<T>>::block_number(),
-          time: <pallet_timestamp::Module<T>>::now(),
-        },
+        created: Self::new_change(owner.clone()),
         updated: None,
         writers: vec![],
         slug: slug.clone(),
@@ -326,56 +317,638 @@ decl_module! {
       };
 
       // Blog creator automatically follows their blog:
-      // Self::add_blog_follower_and_insert_blog(owner.clone(), new_blog, true)?;
+      Self::add_blog_follower_and_insert_blog(owner.clone(), new_blog, true)?;
 
       <BlogIdsByOwner<T>>::mutate(owner.clone(), |ids| ids.push(blog_id));
-      <BlogIdBySlug<T>>::insert(slug, blog_id);
-      <NextBlogId<T>>::mutate(|n| { *n += 1.into(); });
+      BlogIdBySlug::insert(slug, blog_id);
+      NextBlogId::mutate(|n| { *n += 1; });
     }
 
-    // pub fn update_blog(origin, blog_id: T::BlogId, update: BlogUpdate<T>) {}
+    pub fn update_blog(origin, blog_id: BlogId, update: BlogUpdate<T::AccountId>) {
+      let owner = ensure_signed(origin)?;
 
-    pub fn follow_blog(origin, blog_id: T::BlogId) {}
+      let has_updates =
+        update.writers.is_some() ||
+        update.slug.is_some() ||
+        update.ipfs_hash.is_some();
 
-    pub fn unfollow_blog(origin, blog_id: T::BlogId) {}
+      ensure!(has_updates, MSG_NOTHING_TO_UPDATE_IN_BLOG);
 
-    pub fn follow_account(origin, account: T::AccountId) {}
+      let mut blog = Self::blog_by_id(blog_id).ok_or(MSG_BLOG_NOT_FOUND)?;
 
-    pub fn unfollow_account(origin, account: T::AccountId) {}
+      // TODO ensure: blog writers also should be able to edit this blog:
+      ensure!(owner == blog.created.account, MSG_ONLY_BLOG_OWNER_CAN_UPDATE_BLOG);
 
-    pub fn create_profile(origin, username: Vec<u8>, ipfs_hash: Vec<u8>) {}
+      let mut fields_updated = 0;
+      let mut new_history_record = BlogHistoryRecord {
+        edited: Self::new_change(owner.clone()),
+        old_data: BlogUpdate {writers: None, slug: None, ipfs_hash: None}
+      };
 
-    pub fn update_profile(origin, update: ProfileUpdate) {}
+      if let Some(writers) = update.writers {
+        if writers != blog.writers {
+          // TODO validate writers.
+          // TODO update BlogIdsByWriter: insert new, delete removed, update only changed writers.
+          new_history_record.old_data.writers = Some(blog.writers);
+          blog.writers = writers;
+          fields_updated += 1;
+        }
+      }
 
-    // pub fn create_post(origin, blog_id: T::BlogId, ipfs_hash: Vec<u8>, extension: PostExtension<T>) {}
+      if let Some(ipfs_hash) = update.ipfs_hash {
+        if ipfs_hash != blog.ipfs_hash {
+          Self::is_ipfs_hash_valid(ipfs_hash.clone())?;
+          new_history_record.old_data.ipfs_hash = Some(blog.ipfs_hash);
+          blog.ipfs_hash = ipfs_hash;
+          fields_updated += 1;
+        }
+      }
 
-    // pub fn update_post(origin, post_id: T::PostId, update: PostUpdate<T>) {}
+      if let Some(slug) = update.slug {
+        if slug != blog.slug {
+          let slug_len = slug.len();
+          ensure!(slug_len >= Self::slug_min_len() as usize, MSG_BLOG_SLUG_IS_TOO_SHORT);
+          ensure!(slug_len <= Self::slug_max_len() as usize, MSG_BLOG_SLUG_IS_TOO_LONG);
+          ensure!(!BlogIdBySlug::exists(slug.clone()), MSG_BLOG_SLUG_IS_NOT_UNIQUE);
 
-    pub fn create_comment(origin, post_id: T::PostId, parent_id: Option<T::CommentId>, ipfs_hash: Vec<u8>) {}
+          BlogIdBySlug::remove(blog.slug.clone());
+          BlogIdBySlug::insert(slug.clone(), blog_id);
+          new_history_record.old_data.slug = Some(blog.slug);
+          blog.slug = slug;
+          fields_updated += 1;
+        }
+      }
 
-    pub fn update_comment(origin, comment_id: T::CommentId, update: CommentUpdate) {}
+      // Update this blog only if at least one field should be updated:
+      if fields_updated > 0 {
+        blog.updated = Some(Self::new_change(owner.clone()));
+        blog.edit_history.push(new_history_record);
+        <BlogById<T>>::insert(blog_id, blog);
+        Self::deposit_event(RawEvent::BlogUpdated(owner.clone(), blog_id));
+      }
+    }
 
-    pub fn create_post_reaction(origin, post_id: T::PostId, kind: ReactionKind) {}
+    pub fn follow_blog(origin, blog_id: BlogId) {
+      let follower = ensure_signed(origin)?;
 
-    pub fn update_post_reaction(origin, post_id: T::PostId, reaction_id: T::ReactionId, new_kind: ReactionKind) {}
+      let ref mut blog = Self::blog_by_id(blog_id).ok_or(MSG_BLOG_NOT_FOUND)?;
+      ensure!(!Self::blog_followed_by_account((follower.clone(), blog_id)), MSG_ACCOUNT_IS_FOLLOWING_BLOG);
 
-    pub fn delete_post_reaction(origin, post_id: T::PostId, reaction_id: T::ReactionId) {}
+      Self::add_blog_follower_and_insert_blog(follower.clone(), blog, false)?;
+    }
 
-    pub fn create_comment_reaction(origin, comment_id: T::CommentId, kind: ReactionKind) {}
+    pub fn unfollow_blog(origin, blog_id: BlogId) {
+      let follower = ensure_signed(origin)?;
 
-    pub fn update_comment_reaction(origin, comment_id: T::CommentId, reaction_id: T::ReactionId, new_kind: ReactionKind) {}
+      let ref mut blog = Self::blog_by_id(blog_id).ok_or(MSG_BLOG_NOT_FOUND)?;
+      ensure!(Self::blog_followed_by_account((follower.clone(), blog_id)), MSG_ACCOUNT_IS_NOT_FOLLOWING_BLOG);
 
-    pub fn delete_comment_reaction(origin, comment_id: T::CommentId, reaction_id: T::ReactionId) {}
+      let mut social_account = Self::social_account_by_id(follower.clone()).ok_or(MSG_SOCIAL_ACCOUNT_NOT_FOUND)?;
+      social_account.following_blogs_count = social_account.following_blogs_count
+        .checked_sub(1)
+        .ok_or(MSG_UNDERFLOW_UNFOLLOWING_BLOG)?;
+      blog.followers_count = blog.followers_count.checked_sub(1).ok_or(MSG_UNDERFLOW_UNFOLLOWING_BLOG)?;
+
+      if blog.created.account != follower {
+        let author = blog.created.account.clone();
+        if let Some(score_diff) = Self::account_reputation_diff_by_account((follower.clone(), author.clone(), ScoringAction::FollowBlog)) {
+          blog.score = blog.score.checked_sub(score_diff as i32).ok_or(MSG_OUT_OF_BOUNDS_UPDATING_BLOG_SCORE)?;
+          Self::change_social_account_reputation(author.clone(), follower.clone(), score_diff * -1, ScoringAction::FollowBlog)?;
+        }
+      }
+
+      <BlogsFollowedByAccount<T>>::mutate(follower.clone(), |blog_ids| Self::vec_remove_on(blog_ids, blog_id));
+      <BlogFollowers<T>>::mutate(blog_id, |account_ids| Self::vec_remove_on(account_ids, follower.clone()));
+      <BlogFollowedByAccount<T>>::remove((follower.clone(), blog_id));
+      <SocialAccountById<T>>::insert(follower.clone(), social_account);
+      <BlogById<T>>::insert(blog_id, blog);
+
+      Self::deposit_event(RawEvent::BlogUnfollowed(follower.clone(), blog_id));
+    }
+
+    pub fn follow_account(origin, account: T::AccountId) {
+      let follower = ensure_signed(origin)?;
+
+      ensure!(follower != account, MSG_ACCOUNT_CANNOT_FOLLOW_ITSELF);
+      ensure!(!<AccountFollowedByAccount<T>>::exists((follower.clone(), account.clone())), MSG_ACCOUNT_IS_ALREADY_FOLLOWED);
+
+      let mut follower_account = Self::get_or_new_social_account(follower.clone());
+      let mut followed_account = Self::get_or_new_social_account(account.clone());
+
+      follower_account.following_accounts_count = follower_account.following_accounts_count
+        .checked_add(1).ok_or(MSG_OVERFLOW_FOLLOWING_ACCOUNT)?;
+      followed_account.followers_count = followed_account.followers_count
+        .checked_add(1).ok_or(MSG_OVERFLOW_FOLLOWING_ACCOUNT)?;
+
+      Self::change_social_account_reputation(account.clone(), follower.clone(),
+        Self::get_score_diff(follower_account.reputation.clone(), ScoringAction::FollowAccount),
+        ScoringAction::FollowAccount
+      )?;
+
+      <SocialAccountById<T>>::insert(follower.clone(), follower_account);
+      <SocialAccountById<T>>::insert(account.clone(), followed_account);
+      <AccountsFollowedByAccount<T>>::mutate(follower.clone(), |ids| ids.push(account.clone()));
+      <AccountFollowers<T>>::mutate(account.clone(), |ids| ids.push(follower.clone()));
+      <AccountFollowedByAccount<T>>::insert((follower.clone(), account.clone()), true);
+
+      Self::deposit_event(RawEvent::AccountFollowed(follower, account));
+    }
+
+    pub fn unfollow_account(origin, account: T::AccountId) {
+      let follower = ensure_signed(origin)?;
+
+      ensure!(follower != account, MSG_ACCOUNT_CANNOT_UNFOLLOW_ITSELF);
+
+      let mut follower_account = Self::social_account_by_id(follower.clone()).ok_or(MSG_FOLLOWER_ACCOUNT_NOT_FOUND)?;
+      let mut followed_account = Self::social_account_by_id(account.clone()).ok_or(MSG_FOLLOWED_ACCOUNT_NOT_FOUND)?;
+
+      ensure!(<AccountFollowedByAccount<T>>::exists((follower.clone(), account.clone())), MSG_ACCOUNT_IS_NOT_FOLLOWED);
+
+      follower_account.following_accounts_count = follower_account.following_accounts_count
+        .checked_sub(1).ok_or(MSG_UNDERFLOW_UNFOLLOWING_ACCOUNT)?;
+      followed_account.followers_count = followed_account.followers_count
+        .checked_sub(1).ok_or(MSG_UNDERFLOW_UNFOLLOWING_ACCOUNT)?;
+
+      let reputation_diff = Self::account_reputation_diff_by_account(
+        (follower.clone(), account.clone(), ScoringAction::FollowAccount)
+      ).ok_or(MSG_REPUTATION_DIFF_NOT_FOUND)?;
+      Self::change_social_account_reputation(account.clone(), follower.clone(),
+        reputation_diff,
+        ScoringAction::FollowAccount
+      )?;
+
+      <SocialAccountById<T>>::insert(follower.clone(), follower_account);
+      <SocialAccountById<T>>::insert(account.clone(), followed_account);
+      <AccountsFollowedByAccount<T>>::mutate(follower.clone(), |account_ids| Self::vec_remove_on(account_ids, account.clone()));
+      <AccountFollowers<T>>::mutate(account.clone(), |account_ids| Self::vec_remove_on(account_ids, follower.clone()));
+      <AccountFollowedByAccount<T>>::remove((follower.clone(), account.clone()));
+
+      Self::deposit_event(RawEvent::AccountUnfollowed(follower, account));
+    }
+
+    pub fn create_profile(origin, username: Vec<u8>, ipfs_hash: Vec<u8>) {
+      let owner = ensure_signed(origin)?;
+
+      let mut social_account = Self::get_or_new_social_account(owner.clone());
+      ensure!(social_account.profile.is_none(), MSG_PROFILE_ALREADY_EXISTS);
+      Self::is_username_valid(username.clone())?;
+      Self::is_ipfs_hash_valid(ipfs_hash.clone())?;
+
+      social_account.profile = Some(
+        Profile {
+          created: Self::new_change(owner.clone()),
+          updated: None,
+          username: username.clone(),
+          ipfs_hash,
+          edit_history: vec![]
+        }
+      );
+      <AccountByProfileUsername<T>>::insert(username.clone(), owner.clone());
+      <SocialAccountById<T>>::insert(owner.clone(), social_account.clone());
+
+      Self::deposit_event(RawEvent::ProfileCreated(owner.clone()));
+    }
+
+    pub fn update_profile(origin, update: ProfileUpdate) {
+      let owner = ensure_signed(origin)?;
+
+      let has_updates =
+        update.username.is_some() ||
+        update.ipfs_hash.is_some();
+
+      ensure!(has_updates, MSG_NOTHING_TO_UPDATE_IN_PROFILE);
+
+      let mut social_account = Self::social_account_by_id(owner.clone()).ok_or(MSG_SOCIAL_ACCOUNT_NOT_FOUND)?;
+      let mut profile = social_account.profile.ok_or(MSG_PROFILE_DOESNT_EXIST)?;
+      let mut is_update_applied = false;
+      let mut new_history_record = ProfileHistoryRecord {
+        edited: Self::new_change(owner.clone()),
+        old_data: ProfileUpdate {username: None, ipfs_hash: None}
+      };
+
+      if let Some(ipfs_hash) = update.ipfs_hash {
+        if ipfs_hash != profile.ipfs_hash {
+          Self::is_ipfs_hash_valid(ipfs_hash.clone())?;
+          new_history_record.old_data.ipfs_hash = Some(profile.ipfs_hash);
+          profile.ipfs_hash = ipfs_hash;
+          is_update_applied = true;
+        }
+      }
+
+      if let Some(username) = update.username {
+        if username != profile.username {
+          Self::is_username_valid(username.clone())?;
+          <AccountByProfileUsername<T>>::remove(profile.username.clone());
+          <AccountByProfileUsername<T>>::insert(username.clone(), owner.clone());
+          new_history_record.old_data.username = Some(profile.username);
+          profile.username = username;
+          is_update_applied = true;
+        }
+      }
+
+      if is_update_applied {
+        profile.updated = Some(Self::new_change(owner.clone()));
+        profile.edit_history.push(new_history_record);
+        social_account.profile = Some(profile);
+        <SocialAccountById<T>>::insert(owner.clone(), social_account);
+
+        Self::deposit_event(RawEvent::ProfileUpdated(owner.clone()));
+      }
+    }
+
+    pub fn create_post(origin, blog_id: BlogId, ipfs_hash: Vec<u8>, extension: PostExtension) {
+      let owner = ensure_signed(origin)?;
+
+      let mut blog = Self::blog_by_id(blog_id).ok_or(MSG_BLOG_NOT_FOUND)?;
+      blog.posts_count = blog.posts_count.checked_add(1).ok_or(MSG_OVERFLOW_ADDING_POST_ON_BLOG)?;
+
+      let new_post_id = Self::next_post_id();
+
+      // Sharing functions contain check for post/comment existance
+      match extension {
+        PostExtension::RegularPost => {
+          Self::is_ipfs_hash_valid(ipfs_hash.clone())?;
+        },
+        PostExtension::SharedPost(post_id) => {
+          let post = Self::post_by_id(post_id).ok_or(MSG_ORIGINAL_POST_NOT_FOUND)?;
+          ensure!(post.extension == PostExtension::RegularPost, MSG_CANNOT_SHARE_SHARED_POST);
+          Self::share_post(owner.clone(), post_id, new_post_id)?;
+        },
+        PostExtension::SharedComment(comment_id) => {
+          Self::share_comment(owner.clone(), comment_id, new_post_id)?;
+        },
+      }
+
+      let new_post: Post<T> = Post {
+        id: new_post_id,
+        blog_id,
+        created: Self::new_change(owner.clone()),
+        updated: None,
+        extension,
+        ipfs_hash,
+        comments_count: 0,
+        upvotes_count: 0,
+        downvotes_count: 0,
+        shares_count: 0,
+        edit_history: vec![],
+        score: 0,
+      };
+
+      <PostById<T>>::insert(new_post_id, new_post);
+      PostIdsByBlogId::mutate(blog_id, |ids| ids.push(new_post_id));
+      NextPostId::mutate(|n| { *n += 1; });
+      <BlogById<T>>::insert(blog_id, blog);
+
+      Self::deposit_event(RawEvent::PostCreated(owner.clone(), new_post_id));
+    }
+
+    pub fn update_post(origin, post_id: PostId, update: PostUpdate) {
+      let owner = ensure_signed(origin)?;
+
+      let has_updates =
+        update.blog_id.is_some() ||
+        update.ipfs_hash.is_some();
+
+      ensure!(has_updates, MSG_NOTHING_TO_UPDATE_IN_POST);
+
+      let mut post = Self::post_by_id(post_id).ok_or(MSG_POST_NOT_FOUND)?;
+
+      // TODO ensure: blog writers also should be able to edit this post:
+      ensure!(owner == post.created.account, MSG_ONLY_POST_OWNER_CAN_UPDATE_POST);
+
+      let mut fields_updated = 0;
+      let mut new_history_record = PostHistoryRecord {
+        edited: Self::new_change(owner.clone()),
+        old_data: PostUpdate {blog_id: None, ipfs_hash: None}
+      };
+
+      if let Some(ipfs_hash) = update.ipfs_hash {
+        if ipfs_hash != post.ipfs_hash {
+          Self::is_ipfs_hash_valid(ipfs_hash.clone())?;
+          new_history_record.old_data.ipfs_hash = Some(post.ipfs_hash);
+          post.ipfs_hash = ipfs_hash;
+          fields_updated += 1;
+        }
+      }
+
+      // Move this post to another blog:
+      if let Some(blog_id) = update.blog_id {
+        if blog_id != post.blog_id {
+          Self::ensure_blog_exists(blog_id)?;
+
+          // Remove post_id from its old blog:
+          PostIdsByBlogId::mutate(post.blog_id, |post_ids| Self::vec_remove_on(post_ids, post_id));
+
+          // Add post_id to its new blog:
+          PostIdsByBlogId::mutate(blog_id.clone(), |ids| ids.push(post_id));
+          new_history_record.old_data.blog_id = Some(post.blog_id);
+          post.blog_id = blog_id;
+          fields_updated += 1;
+        }
+      }
+
+      // Update this post only if at least one field should be updated:
+      if fields_updated > 0 {
+        post.updated = Some(Self::new_change(owner.clone()));
+        post.edit_history.push(new_history_record);
+        <PostById<T>>::insert(post_id, post);
+
+        Self::deposit_event(RawEvent::PostUpdated(owner.clone(), post_id));
+      }
+    }
+
+    pub fn create_comment(origin, post_id: PostId, parent_id: Option<CommentId>, ipfs_hash: Vec<u8>) {
+      let owner = ensure_signed(origin)?;
+
+      let ref mut post = Self::post_by_id(post_id).ok_or(MSG_POST_NOT_FOUND)?;
+      Self::is_ipfs_hash_valid(ipfs_hash.clone())?;
+
+      let comment_id = Self::next_comment_id();
+      let new_comment: Comment<T> = Comment {
+        id: comment_id,
+        parent_id,
+        post_id,
+        created: Self::new_change(owner.clone()),
+        updated: None,
+        ipfs_hash,
+        upvotes_count: 0,
+        downvotes_count: 0,
+        shares_count: 0,
+        direct_replies_count: 0,
+        edit_history: vec![],
+        score: 0,
+      };
+
+      post.comments_count = post.comments_count.checked_add(1).ok_or(MSG_OVERFLOW_ADDING_COMMENT_ON_POST)?;
+
+      Self::change_post_score(owner.clone(), post, ScoringAction::CreateComment)?;
+
+      if let Some(id) = parent_id {
+        let mut parent_comment = Self::comment_by_id(id).ok_or(MSG_UNKNOWN_PARENT_COMMENT)?;
+        parent_comment.direct_replies_count = parent_comment.direct_replies_count.checked_add(1).ok_or(MSG_OVERFLOW_REPLYING_ON_COMMENT)?;
+        <CommentById<T>>::insert(id, parent_comment);
+      }
+
+      <CommentById<T>>::insert(comment_id, new_comment);
+      CommentIdsByPostId::mutate(post_id, |ids| ids.push(comment_id));
+      NextCommentId::mutate(|n| { *n += 1; });
+      <PostById<T>>::insert(post_id, post);
+
+      Self::deposit_event(RawEvent::CommentCreated(owner.clone(), comment_id));
+    }
+
+    pub fn update_comment(origin, comment_id: CommentId, update: CommentUpdate) {
+      let owner = ensure_signed(origin)?;
+
+      let mut comment = Self::comment_by_id(comment_id).ok_or(MSG_COMMENT_NOT_FOUND)?;
+      ensure!(owner == comment.created.account, MSG_ONLY_COMMENT_AUTHOR_CAN_UPDATE_COMMENT);
+
+      let ipfs_hash = update.ipfs_hash;
+      ensure!(ipfs_hash != comment.ipfs_hash, MSG_NEW_COMMENT_HASH_DO_NOT_DIFFER);
+      Self::is_ipfs_hash_valid(ipfs_hash.clone())?;
+
+      let new_history_record = CommentHistoryRecord {
+        edited: Self::new_change(owner.clone()),
+        old_data: CommentUpdate {ipfs_hash: comment.ipfs_hash}
+      };
+      comment.edit_history.push(new_history_record);
+
+      comment.ipfs_hash = ipfs_hash;
+      comment.updated = Some(Self::new_change(owner.clone()));
+      <CommentById<T>>::insert(comment_id, comment);
+
+      Self::deposit_event(RawEvent::CommentUpdated(owner.clone(), comment_id));
+    }
+
+    pub fn create_post_reaction(origin, post_id: PostId, kind: ReactionKind) {
+      let owner = ensure_signed(origin)?;
+
+      ensure!(
+        !<PostReactionIdByAccount<T>>::exists((owner.clone(), post_id)),
+        MSG_ACCOUNT_ALREADY_REACTED_TO_POST
+      );
+
+      let ref mut post = Self::post_by_id(post_id).ok_or(MSG_POST_NOT_FOUND)?;
+      let reaction_id = Self::new_reaction(owner.clone(), kind.clone());
+      let action: ScoringAction;
+
+      match kind {
+        ReactionKind::Upvote => {
+          post.upvotes_count = post.upvotes_count.checked_add(1).ok_or(MSG_OVERFLOW_UPVOTING_POST)?;
+          action = ScoringAction::UpvotePost;
+        },
+        ReactionKind::Downvote => {
+          post.downvotes_count = post.downvotes_count.checked_add(1).ok_or(MSG_OVERFLOW_DOWNVOTING_POST)?;
+          action = ScoringAction::DownvotePost;
+        },
+      }
+
+      if post.created.account != owner {
+        Self::change_post_score(owner.clone(), post, action)?;
+      }
+      else {
+        <PostById<T>>::insert(post_id, post);
+      }
+
+      ReactionIdsByPostId::mutate(post_id, |ids| ids.push(reaction_id));
+      <PostReactionIdByAccount<T>>::insert((owner.clone(), post_id), reaction_id);
+
+      Self::deposit_event(RawEvent::PostReactionCreated(owner.clone(), post_id, reaction_id));
+    }
+
+    pub fn update_post_reaction(origin, post_id: PostId, reaction_id: ReactionId, new_kind: ReactionKind) {
+      let owner = ensure_signed(origin)?;
+
+      ensure!(
+        <PostReactionIdByAccount<T>>::exists((owner.clone(), post_id)),
+        MSG_ACCOUNT_HAS_NOT_REACTED_TO_POST
+      );
+
+      let mut reaction = Self::reaction_by_id(reaction_id).ok_or(MSG_REACTION_NOT_FOUND)?;
+      let ref mut post = Self::post_by_id(post_id).ok_or(MSG_POST_NOT_FOUND)?;
+
+      ensure!(owner == reaction.created.account, MSG_ONLY_REACTION_OWNER_CAN_UPDATE_REACTION);
+      ensure!(reaction.kind != new_kind, MSG_NEW_REACTION_KIND_DO_NOT_DIFFER);
+
+      reaction.kind = new_kind;
+      reaction.updated = Some(Self::new_change(owner.clone()));
+      let action: ScoringAction;
+      let action_to_cancel: ScoringAction;
+
+      match new_kind {
+        ReactionKind::Upvote => {
+          post.upvotes_count += 1;
+          post.downvotes_count -= 1;
+          action_to_cancel = ScoringAction::DownvotePost;
+          action = ScoringAction::UpvotePost;
+        },
+        ReactionKind::Downvote => {
+          post.downvotes_count += 1;
+          post.upvotes_count -= 1;
+          action_to_cancel = ScoringAction::UpvotePost;
+          action = ScoringAction::DownvotePost;
+        },
+      }
+      Self::change_post_score(owner.clone(), post, action_to_cancel)?;
+      Self::change_post_score(owner.clone(), post, action)?;
+
+      <ReactionById<T>>::insert(reaction_id, reaction);
+      <PostById<T>>::insert(post_id, post);
+
+      Self::deposit_event(RawEvent::PostReactionUpdated(owner.clone(), post_id, reaction_id));
+    }
+
+    pub fn delete_post_reaction(origin, post_id: PostId, reaction_id: ReactionId) {
+      let owner = ensure_signed(origin)?;
+
+      ensure!(
+        <PostReactionIdByAccount<T>>::exists((owner.clone(), post_id)),
+        MSG_NO_POST_REACTION_BY_ACCOUNT_TO_DELETE
+      );
+
+      let action_to_cancel: ScoringAction;
+      let reaction = Self::reaction_by_id(reaction_id).ok_or(MSG_REACTION_NOT_FOUND)?;
+      let ref mut post = Self::post_by_id(post_id).ok_or(MSG_POST_NOT_FOUND)?;
+
+      ensure!(owner == reaction.created.account, MSG_ONLY_REACTION_OWNER_CAN_UPDATE_REACTION);
+
+      match reaction.kind {
+        ReactionKind::Upvote => {
+          post.upvotes_count -= 1;
+          action_to_cancel = ScoringAction::UpvotePost;
+        },
+        ReactionKind::Downvote => {
+          post.downvotes_count -= 1;
+          action_to_cancel = ScoringAction::DownvotePost;
+
+        },
+      }
+      Self::change_post_score(owner.clone(), post, action_to_cancel)?;
+
+      <PostById<T>>::insert(post_id, post);
+      <ReactionById<T>>::remove(reaction_id);
+      ReactionIdsByPostId::mutate(post_id, |ids| Self::vec_remove_on(ids, reaction_id));
+      <PostReactionIdByAccount<T>>::remove((owner.clone(), post_id));
+
+      Self::deposit_event(RawEvent::PostReactionDeleted(owner.clone(), post_id, reaction_id));
+    }
+
+    pub fn create_comment_reaction(origin, comment_id: CommentId, kind: ReactionKind) {
+      let owner = ensure_signed(origin)?;
+
+      ensure!(
+        !<CommentReactionIdByAccount<T>>::exists((owner.clone(), comment_id)),
+        MSG_ACCOUNT_ALREADY_REACTED_TO_COMMENT
+      );
+
+      let ref mut comment = Self::comment_by_id(comment_id).ok_or(MSG_COMMENT_NOT_FOUND)?;
+      let reaction_id = Self::new_reaction(owner.clone(), kind.clone());
+      let action: ScoringAction;
+
+      match kind {
+        ReactionKind::Upvote => {
+          comment.upvotes_count = comment.upvotes_count.checked_add(1).ok_or(MSG_OVERFLOW_UPVOTING_COMMENT)?;
+          action = ScoringAction::UpvoteComment;
+        },
+        ReactionKind::Downvote => {
+          comment.downvotes_count = comment.downvotes_count.checked_add(1).ok_or(MSG_OVERFLOW_DOWNVOTING_COMMENT)?;
+          action = ScoringAction::DownvoteComment;
+        },
+      }
+      if comment.created.account != owner {
+        Self::change_comment_score(owner.clone(), comment, action)?;
+      }
+      else {
+        <CommentById<T>>::insert(comment_id, comment);
+      }
+
+      ReactionIdsByCommentId::mutate(comment_id, |ids| ids.push(reaction_id));
+      <CommentReactionIdByAccount<T>>::insert((owner.clone(), comment_id), reaction_id);
+
+      Self::deposit_event(RawEvent::CommentReactionCreated(owner.clone(), comment_id, reaction_id));
+    }
+
+    pub fn update_comment_reaction(origin, comment_id: CommentId, reaction_id: ReactionId, new_kind: ReactionKind) {
+      let owner = ensure_signed(origin)?;
+
+      ensure!(
+        <CommentReactionIdByAccount<T>>::exists((owner.clone(), comment_id)),
+        MSG_ACCOUNT_HAS_NOT_REACTED_TO_COMMENT
+      );
+
+      let mut reaction = Self::reaction_by_id(reaction_id).ok_or(MSG_REACTION_NOT_FOUND)?;
+      let ref mut comment = Self::comment_by_id(comment_id).ok_or(MSG_COMMENT_NOT_FOUND)?;
+
+      ensure!(owner == reaction.created.account, MSG_ONLY_REACTION_OWNER_CAN_UPDATE_REACTION);
+      ensure!(reaction.kind != new_kind, MSG_NEW_REACTION_KIND_DO_NOT_DIFFER);
+
+      reaction.kind = new_kind;
+      reaction.updated = Some(Self::new_change(owner.clone()));
+      let action: ScoringAction;
+      let action_to_cancel: ScoringAction;
+
+      match new_kind {
+        ReactionKind::Upvote => {
+          comment.upvotes_count += 1;
+          comment.downvotes_count -= 1;
+          action_to_cancel = ScoringAction::DownvoteComment;
+          action = ScoringAction::UpvoteComment;
+        },
+        ReactionKind::Downvote => {
+          comment.downvotes_count += 1;
+          comment.upvotes_count -= 1;
+          action_to_cancel = ScoringAction::UpvoteComment;
+          action = ScoringAction::DownvoteComment;
+        },
+      }
+      Self::change_comment_score(owner.clone(), comment, action_to_cancel)?;
+      Self::change_comment_score(owner.clone(), comment, action)?;
+
+      <ReactionById<T>>::insert(reaction_id, reaction);
+      <CommentById<T>>::insert(comment_id, comment);
+
+      Self::deposit_event(RawEvent::CommentReactionUpdated(owner.clone(), comment_id, reaction_id));
+    }
+
+    pub fn delete_comment_reaction(origin, comment_id: CommentId, reaction_id: ReactionId) {
+      let owner = ensure_signed(origin)?;
+
+      ensure!(
+        <CommentReactionIdByAccount<T>>::exists((owner.clone(), comment_id)),
+        MSG_NO_COMMENT_REACTION_BY_ACCOUNT_TO_DELETE
+      );
+
+      let action_to_cancel: ScoringAction;
+      let reaction = Self::reaction_by_id(reaction_id).ok_or(MSG_REACTION_NOT_FOUND)?;
+      let ref mut comment = Self::comment_by_id(comment_id).ok_or(MSG_COMMENT_NOT_FOUND)?;
+
+      ensure!(owner == reaction.created.account, MSG_ONLY_REACTION_OWNER_CAN_UPDATE_REACTION);
+
+      match reaction.kind {
+        ReactionKind::Upvote => {
+          comment.upvotes_count -= 1;
+          action_to_cancel = ScoringAction::UpvoteComment
+        },
+        ReactionKind::Downvote => {
+          comment.downvotes_count -= 1;
+          action_to_cancel = ScoringAction::DownvoteComment
+        },
+      }
+      Self::change_comment_score(owner.clone(), comment, action_to_cancel)?;
+
+      <CommentById<T>>::insert(comment_id, comment);
+      ReactionIdsByCommentId::mutate(comment_id, |ids| Self::vec_remove_on(ids, reaction_id));
+      <ReactionById<T>>::remove(reaction_id);
+      <CommentReactionIdByAccount<T>>::remove((owner.clone(), comment_id));
+
+      Self::deposit_event(RawEvent::CommentReactionDeleted(owner.clone(), comment_id, reaction_id));
+    }
   }
 }
 
 decl_event!(
   pub enum Event<T> where
     <T as system::Trait>::AccountId,
-    <T as Trait>::BlogId,
-    <T as Trait>::PostId,
-    <T as Trait>::CommentId,
-    <T as Trait>::ReactionId,
    {
     BlogCreated(AccountId, BlogId),
     BlogUpdated(AccountId, BlogId),
