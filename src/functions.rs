@@ -7,7 +7,7 @@ use frame_support::{dispatch::DispatchResult};
 impl<T: Trait> Module<T> {
 
     pub fn ensure_blog_exists(blog_id: BlogId) -> DispatchResult {
-        ensure!(<BlogById<T>>::exists(blog_id), MSG_BLOG_NOT_FOUND);
+        ensure!(<BlogById<T>>::exists(blog_id), Error::<T>::BlogNotFound);
         Ok(())
     }
 
@@ -45,13 +45,13 @@ impl<T: Trait> Module<T> {
         let mut social_account = Self::get_or_new_social_account(follower.clone());
         social_account.following_blogs_count = social_account.following_blogs_count
             .checked_add(1)
-            .ok_or(MSG_OVERFLOW_FOLLOWING_BLOG)?;
+            .ok_or(Error::<T>::OverflowFollowingBlog)?;
 
-        blog.followers_count = blog.followers_count.checked_add(1).ok_or(MSG_OVERFLOW_FOLLOWING_BLOG)?;
+        blog.followers_count = blog.followers_count.checked_add(1).ok_or(Error::<T>::OverflowFollowingBlog)?;
         if blog.created.account != follower {
             let author = blog.created.account.clone();
             let score_diff = Self::get_score_diff(social_account.reputation, ScoringAction::FollowBlog);
-            blog.score = blog.score.checked_add(score_diff as i32).ok_or(MSG_OUT_OF_BOUNDS_UPDATING_BLOG_SCORE)?;
+            blog.score = blog.score.checked_add(score_diff as i32).ok_or(Error::<T>::OutOfBoundsUpdatingBlogScore)?;
             Self::change_social_account_reputation(author, follower.clone(), score_diff, ScoringAction::FollowBlog)?;
         }
 
@@ -95,13 +95,13 @@ impl<T: Trait> Module<T> {
         <SocialAccountById<T>>::insert(account.clone(), social_account.clone());
 
         let post_id = post.id;
-        let mut blog = Self::blog_by_id(post.blog_id).ok_or(MSG_BLOG_NOT_FOUND)?;
+        let mut blog = Self::blog_by_id(post.blog_id).ok_or(Error::<T>::BlogNotFound)?;
 
         if post.created.account != account {
             if let Some(score_diff) = Self::post_score_by_account((account.clone(), post_id, action)) {
-                let reputation_diff = Self::account_reputation_diff_by_account((account.clone(), post.created.account.clone(), action)).ok_or(MSG_REPUTATION_DIFF_NOT_FOUND)?;
-                post.score = post.score.checked_add(score_diff as i32 * -1).ok_or(MSG_OUT_OF_BOUNDS_REVERTING_POST_SCORE)?;
-                blog.score = blog.score.checked_add(score_diff as i32 * -1).ok_or(MSG_OUT_OF_BOUNDS_REVERTING_BLOG_SCORE)?;
+                let reputation_diff = Self::account_reputation_diff_by_account((account.clone(), post.created.account.clone(), action)).ok_or(Error::<T>::ReputationDiffNotFound)?;
+                post.score = post.score.checked_add(score_diff as i32 * -1).ok_or(Error::<T>::OutOfBoundsRevertingPostScore)?;
+                blog.score = blog.score.checked_add(score_diff as i32 * -1).ok_or(Error::<T>::OutOfBoundsRevertingBlogScore)?;
                 Self::change_social_account_reputation(post.created.account.clone(), account.clone(), reputation_diff * -1, action)?;
                 <PostScoreByAccount<T>>::remove((account.clone(), post_id, action));
             } else {
@@ -119,8 +119,8 @@ impl<T: Trait> Module<T> {
                     _ => (),
                 }
                 let score_diff = Self::get_score_diff(social_account.reputation, action);
-                post.score = post.score.checked_add(score_diff as i32).ok_or(MSG_OUT_OF_BOUNDS_UPDATING_POST_SCORE)?;
-                blog.score = blog.score.checked_add(score_diff as i32).ok_or(MSG_OUT_OF_BOUNDS_UPDATING_BLOG_SCORE)?;
+                post.score = post.score.checked_add(score_diff as i32).ok_or(Error::<T>::OutOfBoundsUpdatingPostScore)?;
+                blog.score = blog.score.checked_add(score_diff as i32).ok_or(Error::<T>::OutOfBoundsUpdatingBlogScore)?;
                 Self::change_social_account_reputation(post.created.account.clone(), account.clone(), score_diff, action)?;
                 <PostScoreByAccount<T>>::insert((account.clone(), post_id, action), score_diff);
             }
@@ -140,8 +140,8 @@ impl<T: Trait> Module<T> {
 
         if comment.created.account != account {
             if let Some(score_diff) = Self::comment_score_by_account((account.clone(), comment_id, action)) {
-                let reputation_diff = Self::account_reputation_diff_by_account((account.clone(), comment.created.account.clone(), action)).ok_or(MSG_REPUTATION_DIFF_NOT_FOUND)?;
-                comment.score = comment.score.checked_add(score_diff as i32 * -1).ok_or(MSG_OUT_OF_BOUNDS_REVERTING_COMMENT_SCORE)?;
+                let reputation_diff = Self::account_reputation_diff_by_account((account.clone(), comment.created.account.clone(), action)).ok_or(Error::<T>::ReputationDiffNotFound)?;
+                comment.score = comment.score.checked_add(score_diff as i32 * -1).ok_or(Error::<T>::OutOfBoundsRevertingCommentScore)?;
                 Self::change_social_account_reputation(comment.created.account.clone(), account.clone(), reputation_diff * -1, action)?;
                 <CommentScoreByAccount<T>>::remove((account.clone(), comment_id, action));
             } else {
@@ -157,13 +157,13 @@ impl<T: Trait> Module<T> {
                         }
                     },
                     ScoringAction::CreateComment => {
-                        let ref mut post = Self::post_by_id(comment.post_id).ok_or(MSG_POST_NOT_FOUND)?;
+                        let ref mut post = Self::post_by_id(comment.post_id).ok_or(Error::<T>::PostNotFound)?;
                         Self::change_post_score(account.clone(), post, action)?;
                     }
                     _ => (),
                 }
                 let score_diff = Self::get_score_diff(social_account.reputation, action);
-                comment.score = comment.score.checked_add(score_diff as i32).ok_or(MSG_OUT_OF_BOUNDS_UPDATING_COMMENT_SCORE)?;
+                comment.score = comment.score.checked_add(score_diff as i32).ok_or(Error::<T>::OutOfBoundsUpdatingCommentScore)?;
                 Self::change_social_account_reputation(comment.created.account.clone(), account.clone(), score_diff, action)?;
                 <CommentScoreByAccount<T>>::insert((account, comment_id, action), score_diff);
             }
@@ -182,9 +182,9 @@ impl<T: Trait> Module<T> {
         }
 
         if score_diff < 0 {
-            social_account.reputation = social_account.reputation.checked_sub((score_diff * -1) as u32).ok_or(MSG_OUT_OF_BOUNDS_UPDATING_ACCOUNT_REPUTATION)?;
+            social_account.reputation = social_account.reputation.checked_sub((score_diff * -1) as u32).ok_or(Error::<T>::OutOfBoundsUpdatingAccountReputation)?;
         } else {
-            social_account.reputation = social_account.reputation.checked_add(score_diff as u32).ok_or(MSG_OUT_OF_BOUNDS_UPDATING_ACCOUNT_REPUTATION)?;
+            social_account.reputation = social_account.reputation.checked_add(score_diff as u32).ok_or(Error::<T>::OutOfBoundsUpdatingAccountReputation)?;
         }
 
         if Self::account_reputation_diff_by_account((scorer.clone(), account.clone(), action)).is_some() {
@@ -231,27 +231,27 @@ impl<T: Trait> Module<T> {
     }
 
     pub fn is_username_valid(username: Vec<u8>) -> DispatchResult {
-        ensure!(Self::account_by_profile_username(username.clone()).is_none(), MSG_USERNAME_IS_BUSY);
-        ensure!(username.len() >= Self::username_min_len() as usize, MSG_USERNAME_TOO_SHORT);
-        ensure!(username.len() <= Self::username_max_len() as usize, MSG_USERNAME_TOO_LONG);
-        ensure!(username.iter().all(|&x| x.is_ascii_alphanumeric()), MSG_USERNAME_NOT_ALPHANUMERIC);
+        ensure!(Self::account_by_profile_username(username.clone()).is_none(), Error::<T>::UsernameIsBusy);
+        ensure!(username.len() >= Self::username_min_len() as usize, Error::<T>::UsernameIsTooShort);
+        ensure!(username.len() <= Self::username_max_len() as usize, Error::<T>::UsernameIsTooLong);
+        ensure!(username.iter().all(|&x| x.is_ascii_alphanumeric()), Error::<T>::UsernameIsNotAlphanumeric);
 
         Ok(())
     }
 
     pub fn is_ipfs_hash_valid(ipfs_hash: Vec<u8>) -> DispatchResult {
-        ensure!(ipfs_hash.len() == Self::ipfs_hash_len() as usize, MSG_IPFS_IS_INCORRECT);
+        ensure!(ipfs_hash.len() == Self::ipfs_hash_len() as usize, Error::<T>::IpfsIsIncorrect);
 
         Ok(())
     }
 
     pub fn share_post(account: T::AccountId, original_post_id: PostId, shared_post_id: PostId) -> DispatchResult {
-        let ref mut original_post = Self::post_by_id(original_post_id).ok_or(MSG_ORIGINAL_POST_NOT_FOUND)?;
+        let ref mut original_post = Self::post_by_id(original_post_id).ok_or(Error::<T>::OriginalPostNotFound)?;
         original_post.shares_count = original_post.shares_count.checked_add(1)
-            .ok_or(MSG_OVERFLOW_TOTAL_SHARES_SHARING_POST)?;
+            .ok_or(Error::<T>::OverflowTotalSharesSharingPost)?;
 
         let mut shares_by_account = Self::post_shares_by_account((account.clone(), original_post_id));
-        shares_by_account = shares_by_account.checked_add(1).ok_or(MSG_OVERFLOW_POST_SHARES_BY_ACCOUNT)?;
+        shares_by_account = shares_by_account.checked_add(1).ok_or(Error::<T>::OverflowPostSharesSharingPost)?;
 
         if shares_by_account == 1 {
             Self::change_post_score(account.clone(), original_post, ScoringAction::SharePost)?;
@@ -267,12 +267,12 @@ impl<T: Trait> Module<T> {
     }
 
     pub fn share_comment(account: T::AccountId, original_comment_id: CommentId, shared_post_id: PostId) -> DispatchResult {
-        let ref mut original_comment = Self::comment_by_id(original_comment_id).ok_or(MSG_ORIGINAL_COMMENT_NOT_FOUND)?;
+        let ref mut original_comment = Self::comment_by_id(original_comment_id).ok_or(Error::<T>::OriginalCommentNotFound)?;
         original_comment.shares_count = original_comment.shares_count.checked_add(1)
-            .ok_or(MSG_OVERFLOW_TOTAL_SHARES_SHARING_COMMENT)?;
+            .ok_or(Error::<T>::OverflowTotalSharesSharingComment)?;
 
         let mut shares_count = Self::comment_shares_by_account((account.clone(), original_comment_id));
-        shares_count = shares_count.checked_add(1).ok_or(MSG_OVERFLOW_COMMENT_SHARES_BY_ACCOUNT)?;
+        shares_count = shares_count.checked_add(1).ok_or(Error::<T>::OverflowCommentSharesByAccount)?;
 
         if shares_count == 1 {
             Self::change_comment_score(account.clone(), original_comment, ScoringAction::ShareComment)?;
