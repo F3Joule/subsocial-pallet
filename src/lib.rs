@@ -4,18 +4,16 @@
 /// https://github.com/paritytech/substrate/blob/master/frame/example/src/lib.rs
 
 pub mod defaults;
-pub mod messages;
 pub mod functions;
-
-use sp_std::prelude::*;
-use codec::{Encode, Decode};
-use frame_support::{decl_module, decl_storage, decl_event, ensure};
-use sp_runtime::{RuntimeDebug};
-use system::ensure_signed;
-use pallet_timestamp;
+mod tests;
 
 use defaults::*;
-use messages::*;
+use sp_std::prelude::*;
+use codec::{Encode, Decode};
+use frame_support::{decl_module, decl_storage, decl_event, decl_error, ensure};
+use sp_runtime::RuntimeDebug;
+use system::ensure_signed;
+use pallet_timestamp;
 
 #[derive(Encode, Decode, Clone, Eq, PartialEq, RuntimeDebug)]
 pub struct Change<T: Trait> {
@@ -217,6 +215,150 @@ pub trait Trait: system::Trait + pallet_timestamp::Trait {
   type Event: From<Event<Self>> + Into<<Self as system::Trait>::Event>;
 }
 
+decl_error! {
+  pub enum Error for Module<T: Trait> {
+    /// Blog was not found by id
+    BlogNotFound,
+    /// Blog slug is too short
+    SlugIsTooShort,
+    /// Blog slug is too long
+    SlugIsTooLong,
+    /// Blog slug is not unique
+    SlugIsNotUnique,
+    /// Nothing to update in blog
+    NoUpdatesInBlog,
+    /// Only blog owner can manage their blog
+    NotABlogOwner,
+
+    /// Post was not found by id
+    PostNotFound,
+    /// Nothing to update in post
+    NoUpdatesInPost,
+    /// Only post author can manage their blog
+    NotAPostAuthor,
+    /// Overflow caused adding post on blog
+    OverflowAddingPostOnBlog,
+
+    /// Comment was not found by id
+    CommentNotFound,
+    /// Unknown parent comment id
+    UnknownParentComment,
+    /// Only comment author can manage their blog
+    NotACommentAuthor,
+    /// New comment IPFS-hash is the same as old one
+    CommentIPFSHashNotDiffer,
+    /// Overflow adding comment on post
+    OverflowAddingCommentOnPost,
+    /// Overflow replying on comment
+    OverflowReplyingOnComment,
+
+    /// Reaction was not found by id
+    ReactionNotFound,
+    /// Account has already reacted to this post
+    AccountAlreadyReactedToPost,
+    /// Account has not reacted to this post yet
+    AccountNotYetReactedToPost,
+    /// There is no post reaction by account that could be deleted
+    PostReactionByAccountNotFound,
+    /// Overflow caused upvoting post
+    OverflowUpvotingPost,
+    /// Overflow caused downvoting post
+    OverflowDownvotingPost,
+    /// Account has already reacted to this comment
+    AccountAlreadyReactedToComment,
+    /// Account has not reacted to this comment yet
+    AccountNotYetReactedToComment,
+    /// There is no comment reaction by account that could be deleted
+    CommentReactionByAccountNotFound,
+    /// Overflow caused upvoting comment
+    OverflowUpvotingComment,
+    /// Overflow caused downvoting comment
+    OverflowDownvotingComment,
+    /// Only reaction owner can update their reaction
+    NotAReactionOwner,
+    /// New reaction kind is the same as old one
+    NewReactionKindNotDiffer,
+
+    /// Account is already following this blog
+    AccountIsFollowingBlog,
+    /// Account is not following this blog
+    AccountIsNotFollowingBlog,
+    /// Account can not follow itself
+    AccountCannotFollowItself,
+    /// Account can not unfollow itself
+    AccountCannotUnfollowItself,
+    /// Account is already followed
+    AccountIsAlreadyFollowed,
+    /// Account is not followed by current follower
+    AccountIsNotFollowed,
+    /// Underflow unfollowing blog
+    UnderflowUnfollowingBlog,
+    /// Overflow caused following blog
+    OverflowFollowingBlog,
+    /// Overflow caused following account
+    OverflowFollowingAccount,
+    /// Underflow caused unfollowing account
+    UnderflowUnfollowingAccount,
+
+    /// Social account was not found by id
+    SocialAccountNotFound,
+    /// Follower social account was not found by id
+    FollowerAccountNotFound,
+    /// Social account that is being followed was not found by id
+    FollowedAccountNotFound,
+
+    /// IPFS-hash is not correct
+    IpfsIsIncorrect,
+
+    /// Out of bounds updating blog score
+    OutOfBoundsUpdatingBlogScore,
+    /// Out of bounds reverting blog score
+    OutOfBoundsRevertingBlogScore,
+    /// Out of bounds updating post score
+    OutOfBoundsUpdatingPostScore,
+    /// Out of bounds reverting post score
+    OutOfBoundsRevertingPostScore,
+    /// Out of bounds updating comment score
+    OutOfBoundsUpdatingCommentScore,
+    /// Out of bounds reverting comment score
+    OutOfBoundsRevertingCommentScore,
+    /// Out of bounds updating social account reputation
+    OutOfBoundsUpdatingAccountReputation,
+    /// Scored account reputation difference by account and action not found
+    ReputationDiffNotFound,
+
+    /// Original post not found when sharing
+    OriginalPostNotFound,
+    /// Overflow caused on total shares counter when sharing post
+    OverflowTotalSharesSharingPost,
+    /// Overflow caused on shares by account counter when sharing post
+    OverflowPostSharesSharingPost,
+    /// Cannot share post that is not a regular post
+    CannotShareSharedPost,
+    /// Original comment not found when sharing
+    OriginalCommentNotFound,
+    /// Overflow caused on total shares counter when sharing comment
+    OverflowTotalSharesSharingComment,
+    /// Overflow caused on shares by account counter when sharing comment
+    OverflowCommentSharesByAccount,
+
+    /// Profile for this account already exists
+    ProfileAlreadyExists,
+    /// Nothing to update in a profile
+    NoUpdatesInProfile,
+    /// Account has no profile yet
+    ProfileDoesNotExist,
+    /// Profile username is busy
+    UsernameIsBusy,
+    /// Username is too short
+    UsernameIsTooShort,
+    /// Username is too long
+    UsernameIsTooLong,
+    /// Username is not alphanumeric
+    UsernameIsNotAlphanumeric,
+  }
+}
+
 // This pallet's storage items.
 decl_storage! {
   trait Store for Module<T: Trait> as TemplateModule {
@@ -297,9 +439,9 @@ decl_module! {
     pub fn create_blog(origin, slug: Vec<u8>, ipfs_hash: Vec<u8>) {
       let owner = ensure_signed(origin)?;
 
-      ensure!(slug.len() >= Self::slug_min_len() as usize, MSG_BLOG_SLUG_IS_TOO_SHORT);
-      ensure!(slug.len() <= Self::slug_max_len() as usize, MSG_BLOG_SLUG_IS_TOO_LONG);
-      ensure!(!BlogIdBySlug::exists(slug.clone()), MSG_BLOG_SLUG_IS_NOT_UNIQUE);
+      ensure!(slug.len() >= Self::slug_min_len() as usize, Error::<T>::SlugIsTooShort);
+      ensure!(slug.len() <= Self::slug_max_len() as usize, Error::<T>::SlugIsTooLong);
+      ensure!(!BlogIdBySlug::exists(slug.clone()), Error::<T>::SlugIsNotUnique);
       Self::is_ipfs_hash_valid(ipfs_hash.clone())?;
 
       let blog_id = Self::next_blog_id();
@@ -332,12 +474,12 @@ decl_module! {
         update.slug.is_some() ||
         update.ipfs_hash.is_some();
 
-      ensure!(has_updates, MSG_NOTHING_TO_UPDATE_IN_BLOG);
+      ensure!(has_updates, Error::<T>::NoUpdatesInBlog);
 
-      let mut blog = Self::blog_by_id(blog_id).ok_or(MSG_BLOG_NOT_FOUND)?;
+      let mut blog = Self::blog_by_id(blog_id).ok_or(Error::<T>::BlogNotFound)?;
 
       // TODO ensure: blog writers also should be able to edit this blog:
-      ensure!(owner == blog.created.account, MSG_ONLY_BLOG_OWNER_CAN_UPDATE_BLOG);
+      ensure!(owner == blog.created.account, Error::<T>::NotABlogOwner);
 
       let mut fields_updated = 0;
       let mut new_history_record = BlogHistoryRecord {
@@ -367,9 +509,9 @@ decl_module! {
       if let Some(slug) = update.slug {
         if slug != blog.slug {
           let slug_len = slug.len();
-          ensure!(slug_len >= Self::slug_min_len() as usize, MSG_BLOG_SLUG_IS_TOO_SHORT);
-          ensure!(slug_len <= Self::slug_max_len() as usize, MSG_BLOG_SLUG_IS_TOO_LONG);
-          ensure!(!BlogIdBySlug::exists(slug.clone()), MSG_BLOG_SLUG_IS_NOT_UNIQUE);
+          ensure!(slug_len >= Self::slug_min_len() as usize, Error::<T>::SlugIsTooShort);
+          ensure!(slug_len <= Self::slug_max_len() as usize, Error::<T>::SlugIsTooLong);
+          ensure!(!BlogIdBySlug::exists(slug.clone()), Error::<T>::SlugIsNotUnique);
 
           BlogIdBySlug::remove(blog.slug.clone());
           BlogIdBySlug::insert(slug.clone(), blog_id);
@@ -391,8 +533,8 @@ decl_module! {
     pub fn follow_blog(origin, blog_id: BlogId) {
       let follower = ensure_signed(origin)?;
 
-      let ref mut blog = Self::blog_by_id(blog_id).ok_or(MSG_BLOG_NOT_FOUND)?;
-      ensure!(!Self::blog_followed_by_account((follower.clone(), blog_id)), MSG_ACCOUNT_IS_FOLLOWING_BLOG);
+      let ref mut blog = Self::blog_by_id(blog_id).ok_or(Error::<T>::BlogNotFound)?;
+      ensure!(!Self::blog_followed_by_account((follower.clone(), blog_id)), Error::<T>::AccountIsFollowingBlog);
 
       Self::add_blog_follower_and_insert_blog(follower.clone(), blog, false)?;
     }
@@ -400,19 +542,19 @@ decl_module! {
     pub fn unfollow_blog(origin, blog_id: BlogId) {
       let follower = ensure_signed(origin)?;
 
-      let ref mut blog = Self::blog_by_id(blog_id).ok_or(MSG_BLOG_NOT_FOUND)?;
-      ensure!(Self::blog_followed_by_account((follower.clone(), blog_id)), MSG_ACCOUNT_IS_NOT_FOLLOWING_BLOG);
+      let ref mut blog = Self::blog_by_id(blog_id).ok_or(Error::<T>::BlogNotFound)?;
+      ensure!(Self::blog_followed_by_account((follower.clone(), blog_id)), Error::<T>::AccountIsNotFollowingBlog);
 
-      let mut social_account = Self::social_account_by_id(follower.clone()).ok_or(MSG_SOCIAL_ACCOUNT_NOT_FOUND)?;
+      let mut social_account = Self::social_account_by_id(follower.clone()).ok_or(Error::<T>::SocialAccountNotFound)?;
       social_account.following_blogs_count = social_account.following_blogs_count
         .checked_sub(1)
-        .ok_or(MSG_UNDERFLOW_UNFOLLOWING_BLOG)?;
-      blog.followers_count = blog.followers_count.checked_sub(1).ok_or(MSG_UNDERFLOW_UNFOLLOWING_BLOG)?;
+        .ok_or(Error::<T>::UnderflowUnfollowingBlog)?;
+      blog.followers_count = blog.followers_count.checked_sub(1).ok_or(Error::<T>::UnderflowUnfollowingBlog)?;
 
       if blog.created.account != follower {
         let author = blog.created.account.clone();
         if let Some(score_diff) = Self::account_reputation_diff_by_account((follower.clone(), author.clone(), ScoringAction::FollowBlog)) {
-          blog.score = blog.score.checked_sub(score_diff as i32).ok_or(MSG_OUT_OF_BOUNDS_UPDATING_BLOG_SCORE)?;
+          blog.score = blog.score.checked_sub(score_diff as i32).ok_or(Error::<T>::OutOfBoundsUpdatingBlogScore)?;
           Self::change_social_account_reputation(author.clone(), follower.clone(), score_diff * -1, ScoringAction::FollowBlog)?;
         }
       }
@@ -429,16 +571,16 @@ decl_module! {
     pub fn follow_account(origin, account: T::AccountId) {
       let follower = ensure_signed(origin)?;
 
-      ensure!(follower != account, MSG_ACCOUNT_CANNOT_FOLLOW_ITSELF);
-      ensure!(!<AccountFollowedByAccount<T>>::exists((follower.clone(), account.clone())), MSG_ACCOUNT_IS_ALREADY_FOLLOWED);
+      ensure!(follower != account, Error::<T>::AccountCannotFollowItself);
+      ensure!(!<AccountFollowedByAccount<T>>::exists((follower.clone(), account.clone())), Error::<T>::AccountIsAlreadyFollowed);
 
       let mut follower_account = Self::get_or_new_social_account(follower.clone());
       let mut followed_account = Self::get_or_new_social_account(account.clone());
 
       follower_account.following_accounts_count = follower_account.following_accounts_count
-        .checked_add(1).ok_or(MSG_OVERFLOW_FOLLOWING_ACCOUNT)?;
+        .checked_add(1).ok_or(Error::<T>::OverflowFollowingAccount)?;
       followed_account.followers_count = followed_account.followers_count
-        .checked_add(1).ok_or(MSG_OVERFLOW_FOLLOWING_ACCOUNT)?;
+        .checked_add(1).ok_or(Error::<T>::OverflowFollowingAccount)?;
 
       Self::change_social_account_reputation(account.clone(), follower.clone(),
         Self::get_score_diff(follower_account.reputation.clone(), ScoringAction::FollowAccount),
@@ -457,21 +599,21 @@ decl_module! {
     pub fn unfollow_account(origin, account: T::AccountId) {
       let follower = ensure_signed(origin)?;
 
-      ensure!(follower != account, MSG_ACCOUNT_CANNOT_UNFOLLOW_ITSELF);
+      ensure!(follower != account, Error::<T>::AccountCannotUnfollowItself);
 
-      let mut follower_account = Self::social_account_by_id(follower.clone()).ok_or(MSG_FOLLOWER_ACCOUNT_NOT_FOUND)?;
-      let mut followed_account = Self::social_account_by_id(account.clone()).ok_or(MSG_FOLLOWED_ACCOUNT_NOT_FOUND)?;
+      let mut follower_account = Self::social_account_by_id(follower.clone()).ok_or(Error::<T>::FollowerAccountNotFound)?;
+      let mut followed_account = Self::social_account_by_id(account.clone()).ok_or(Error::<T>::FollowedAccountNotFound)?;
 
-      ensure!(<AccountFollowedByAccount<T>>::exists((follower.clone(), account.clone())), MSG_ACCOUNT_IS_NOT_FOLLOWED);
+      ensure!(<AccountFollowedByAccount<T>>::exists((follower.clone(), account.clone())), Error::<T>::AccountIsNotFollowed);
 
       follower_account.following_accounts_count = follower_account.following_accounts_count
-        .checked_sub(1).ok_or(MSG_UNDERFLOW_UNFOLLOWING_ACCOUNT)?;
+        .checked_sub(1).ok_or(Error::<T>::UnderflowUnfollowingAccount)?;
       followed_account.followers_count = followed_account.followers_count
-        .checked_sub(1).ok_or(MSG_UNDERFLOW_UNFOLLOWING_ACCOUNT)?;
+        .checked_sub(1).ok_or(Error::<T>::UnderflowUnfollowingAccount)?;
 
       let reputation_diff = Self::account_reputation_diff_by_account(
         (follower.clone(), account.clone(), ScoringAction::FollowAccount)
-      ).ok_or(MSG_REPUTATION_DIFF_NOT_FOUND)?;
+      ).ok_or(Error::<T>::ReputationDiffNotFound)?;
       Self::change_social_account_reputation(account.clone(), follower.clone(),
         reputation_diff,
         ScoringAction::FollowAccount
@@ -490,7 +632,7 @@ decl_module! {
       let owner = ensure_signed(origin)?;
 
       let mut social_account = Self::get_or_new_social_account(owner.clone());
-      ensure!(social_account.profile.is_none(), MSG_PROFILE_ALREADY_EXISTS);
+      ensure!(social_account.profile.is_none(), Error::<T>::ProfileAlreadyExists);
       Self::is_username_valid(username.clone())?;
       Self::is_ipfs_hash_valid(ipfs_hash.clone())?;
 
@@ -516,10 +658,10 @@ decl_module! {
         update.username.is_some() ||
         update.ipfs_hash.is_some();
 
-      ensure!(has_updates, MSG_NOTHING_TO_UPDATE_IN_PROFILE);
+      ensure!(has_updates, Error::<T>::NoUpdatesInProfile);
 
-      let mut social_account = Self::social_account_by_id(owner.clone()).ok_or(MSG_SOCIAL_ACCOUNT_NOT_FOUND)?;
-      let mut profile = social_account.profile.ok_or(MSG_PROFILE_DOESNT_EXIST)?;
+      let mut social_account = Self::social_account_by_id(owner.clone()).ok_or(Error::<T>::SocialAccountNotFound)?;
+      let mut profile = social_account.profile.ok_or(Error::<T>::ProfileDoesNotExist)?;
       let mut is_update_applied = false;
       let mut new_history_record = ProfileHistoryRecord {
         edited: Self::new_change(owner.clone()),
@@ -559,8 +701,8 @@ decl_module! {
     pub fn create_post(origin, blog_id: BlogId, ipfs_hash: Vec<u8>, extension: PostExtension) {
       let owner = ensure_signed(origin)?;
 
-      let mut blog = Self::blog_by_id(blog_id).ok_or(MSG_BLOG_NOT_FOUND)?;
-      blog.posts_count = blog.posts_count.checked_add(1).ok_or(MSG_OVERFLOW_ADDING_POST_ON_BLOG)?;
+      let mut blog = Self::blog_by_id(blog_id).ok_or(Error::<T>::BlogNotFound)?;
+      blog.posts_count = blog.posts_count.checked_add(1).ok_or(Error::<T>::OverflowAddingPostOnBlog)?;
 
       let new_post_id = Self::next_post_id();
 
@@ -570,8 +712,8 @@ decl_module! {
           Self::is_ipfs_hash_valid(ipfs_hash.clone())?;
         },
         PostExtension::SharedPost(post_id) => {
-          let post = Self::post_by_id(post_id).ok_or(MSG_ORIGINAL_POST_NOT_FOUND)?;
-          ensure!(post.extension == PostExtension::RegularPost, MSG_CANNOT_SHARE_SHARED_POST);
+          let post = Self::post_by_id(post_id).ok_or(Error::<T>::OriginalPostNotFound)?;
+          ensure!(post.extension == PostExtension::RegularPost, Error::<T>::CannotShareSharedPost);
           Self::share_post(owner.clone(), post_id, new_post_id)?;
         },
         PostExtension::SharedComment(comment_id) => {
@@ -609,12 +751,12 @@ decl_module! {
         update.blog_id.is_some() ||
         update.ipfs_hash.is_some();
 
-      ensure!(has_updates, MSG_NOTHING_TO_UPDATE_IN_POST);
+      ensure!(has_updates, Error::<T>::NoUpdatesInPost);
 
-      let mut post = Self::post_by_id(post_id).ok_or(MSG_POST_NOT_FOUND)?;
+      let mut post = Self::post_by_id(post_id).ok_or(Error::<T>::PostNotFound)?;
 
       // TODO ensure: blog writers also should be able to edit this post:
-      ensure!(owner == post.created.account, MSG_ONLY_POST_OWNER_CAN_UPDATE_POST);
+      ensure!(owner == post.created.account, Error::<T>::NotAPostAuthor);
 
       let mut fields_updated = 0;
       let mut new_history_record = PostHistoryRecord {
@@ -660,7 +802,7 @@ decl_module! {
     pub fn create_comment(origin, post_id: PostId, parent_id: Option<CommentId>, ipfs_hash: Vec<u8>) {
       let owner = ensure_signed(origin)?;
 
-      let ref mut post = Self::post_by_id(post_id).ok_or(MSG_POST_NOT_FOUND)?;
+      let ref mut post = Self::post_by_id(post_id).ok_or(Error::<T>::PostNotFound)?;
       Self::is_ipfs_hash_valid(ipfs_hash.clone())?;
 
       let comment_id = Self::next_comment_id();
@@ -679,13 +821,13 @@ decl_module! {
         score: 0,
       };
 
-      post.comments_count = post.comments_count.checked_add(1).ok_or(MSG_OVERFLOW_ADDING_COMMENT_ON_POST)?;
+      post.comments_count = post.comments_count.checked_add(1).ok_or(Error::<T>::OverflowAddingCommentOnPost)?;
 
       Self::change_post_score(owner.clone(), post, ScoringAction::CreateComment)?;
 
       if let Some(id) = parent_id {
-        let mut parent_comment = Self::comment_by_id(id).ok_or(MSG_UNKNOWN_PARENT_COMMENT)?;
-        parent_comment.direct_replies_count = parent_comment.direct_replies_count.checked_add(1).ok_or(MSG_OVERFLOW_REPLYING_ON_COMMENT)?;
+        let mut parent_comment = Self::comment_by_id(id).ok_or(Error::<T>::UnknownParentComment)?;
+        parent_comment.direct_replies_count = parent_comment.direct_replies_count.checked_add(1).ok_or(Error::<T>::OverflowReplyingOnComment)?;
         <CommentById<T>>::insert(id, parent_comment);
       }
 
@@ -700,11 +842,11 @@ decl_module! {
     pub fn update_comment(origin, comment_id: CommentId, update: CommentUpdate) {
       let owner = ensure_signed(origin)?;
 
-      let mut comment = Self::comment_by_id(comment_id).ok_or(MSG_COMMENT_NOT_FOUND)?;
-      ensure!(owner == comment.created.account, MSG_ONLY_COMMENT_AUTHOR_CAN_UPDATE_COMMENT);
+      let mut comment = Self::comment_by_id(comment_id).ok_or(Error::<T>::CommentNotFound)?;
+      ensure!(owner == comment.created.account, Error::<T>::NotACommentAuthor);
 
       let ipfs_hash = update.ipfs_hash;
-      ensure!(ipfs_hash != comment.ipfs_hash, MSG_NEW_COMMENT_HASH_DO_NOT_DIFFER);
+      ensure!(ipfs_hash != comment.ipfs_hash, Error::<T>::CommentIPFSHashNotDiffer);
       Self::is_ipfs_hash_valid(ipfs_hash.clone())?;
 
       let new_history_record = CommentHistoryRecord {
@@ -725,20 +867,20 @@ decl_module! {
 
       ensure!(
         !<PostReactionIdByAccount<T>>::exists((owner.clone(), post_id)),
-        MSG_ACCOUNT_ALREADY_REACTED_TO_POST
+        Error::<T>::AccountAlreadyReactedToPost
       );
 
-      let ref mut post = Self::post_by_id(post_id).ok_or(MSG_POST_NOT_FOUND)?;
+      let ref mut post = Self::post_by_id(post_id).ok_or(Error::<T>::PostNotFound)?;
       let reaction_id = Self::new_reaction(owner.clone(), kind.clone());
       let action: ScoringAction;
 
       match kind {
         ReactionKind::Upvote => {
-          post.upvotes_count = post.upvotes_count.checked_add(1).ok_or(MSG_OVERFLOW_UPVOTING_POST)?;
+          post.upvotes_count = post.upvotes_count.checked_add(1).ok_or(Error::<T>::OverflowUpvotingPost)?;
           action = ScoringAction::UpvotePost;
         },
         ReactionKind::Downvote => {
-          post.downvotes_count = post.downvotes_count.checked_add(1).ok_or(MSG_OVERFLOW_DOWNVOTING_POST)?;
+          post.downvotes_count = post.downvotes_count.checked_add(1).ok_or(Error::<T>::OverflowDownvotingPost)?;
           action = ScoringAction::DownvotePost;
         },
       }
@@ -761,14 +903,14 @@ decl_module! {
 
       ensure!(
         <PostReactionIdByAccount<T>>::exists((owner.clone(), post_id)),
-        MSG_ACCOUNT_HAS_NOT_REACTED_TO_POST
+        Error::<T>::AccountNotYetReactedToPost
       );
 
-      let mut reaction = Self::reaction_by_id(reaction_id).ok_or(MSG_REACTION_NOT_FOUND)?;
-      let ref mut post = Self::post_by_id(post_id).ok_or(MSG_POST_NOT_FOUND)?;
+      let mut reaction = Self::reaction_by_id(reaction_id).ok_or(Error::<T>::ReactionNotFound)?;
+      let ref mut post = Self::post_by_id(post_id).ok_or(Error::<T>::PostNotFound)?;
 
-      ensure!(owner == reaction.created.account, MSG_ONLY_REACTION_OWNER_CAN_UPDATE_REACTION);
-      ensure!(reaction.kind != new_kind, MSG_NEW_REACTION_KIND_DO_NOT_DIFFER);
+      ensure!(owner == reaction.created.account, Error::<T>::NotAReactionOwner);
+      ensure!(reaction.kind != new_kind, Error::<T>::NewReactionKindNotDiffer);
 
       reaction.kind = new_kind;
       reaction.updated = Some(Self::new_change(owner.clone()));
@@ -803,14 +945,14 @@ decl_module! {
 
       ensure!(
         <PostReactionIdByAccount<T>>::exists((owner.clone(), post_id)),
-        MSG_NO_POST_REACTION_BY_ACCOUNT_TO_DELETE
+        Error::<T>::PostReactionByAccountNotFound
       );
 
       let action_to_cancel: ScoringAction;
-      let reaction = Self::reaction_by_id(reaction_id).ok_or(MSG_REACTION_NOT_FOUND)?;
-      let ref mut post = Self::post_by_id(post_id).ok_or(MSG_POST_NOT_FOUND)?;
+      let reaction = Self::reaction_by_id(reaction_id).ok_or(Error::<T>::ReactionNotFound)?;
+      let ref mut post = Self::post_by_id(post_id).ok_or(Error::<T>::PostNotFound)?;
 
-      ensure!(owner == reaction.created.account, MSG_ONLY_REACTION_OWNER_CAN_UPDATE_REACTION);
+      ensure!(owner == reaction.created.account, Error::<T>::NotAReactionOwner);
 
       match reaction.kind {
         ReactionKind::Upvote => {
@@ -838,20 +980,20 @@ decl_module! {
 
       ensure!(
         !<CommentReactionIdByAccount<T>>::exists((owner.clone(), comment_id)),
-        MSG_ACCOUNT_ALREADY_REACTED_TO_COMMENT
+        Error::<T>::AccountAlreadyReactedToComment
       );
 
-      let ref mut comment = Self::comment_by_id(comment_id).ok_or(MSG_COMMENT_NOT_FOUND)?;
+      let ref mut comment = Self::comment_by_id(comment_id).ok_or(Error::<T>::CommentNotFound)?;
       let reaction_id = Self::new_reaction(owner.clone(), kind.clone());
       let action: ScoringAction;
 
       match kind {
         ReactionKind::Upvote => {
-          comment.upvotes_count = comment.upvotes_count.checked_add(1).ok_or(MSG_OVERFLOW_UPVOTING_COMMENT)?;
+          comment.upvotes_count = comment.upvotes_count.checked_add(1).ok_or(Error::<T>::OverflowUpvotingComment)?;
           action = ScoringAction::UpvoteComment;
         },
         ReactionKind::Downvote => {
-          comment.downvotes_count = comment.downvotes_count.checked_add(1).ok_or(MSG_OVERFLOW_DOWNVOTING_COMMENT)?;
+          comment.downvotes_count = comment.downvotes_count.checked_add(1).ok_or(Error::<T>::OverflowDownvotingComment)?;
           action = ScoringAction::DownvoteComment;
         },
       }
@@ -873,14 +1015,14 @@ decl_module! {
 
       ensure!(
         <CommentReactionIdByAccount<T>>::exists((owner.clone(), comment_id)),
-        MSG_ACCOUNT_HAS_NOT_REACTED_TO_COMMENT
+        Error::<T>::AccountNotYetReactedToComment
       );
 
-      let mut reaction = Self::reaction_by_id(reaction_id).ok_or(MSG_REACTION_NOT_FOUND)?;
-      let ref mut comment = Self::comment_by_id(comment_id).ok_or(MSG_COMMENT_NOT_FOUND)?;
+      let mut reaction = Self::reaction_by_id(reaction_id).ok_or(Error::<T>::ReactionNotFound)?;
+      let ref mut comment = Self::comment_by_id(comment_id).ok_or(Error::<T>::CommentNotFound)?;
 
-      ensure!(owner == reaction.created.account, MSG_ONLY_REACTION_OWNER_CAN_UPDATE_REACTION);
-      ensure!(reaction.kind != new_kind, MSG_NEW_REACTION_KIND_DO_NOT_DIFFER);
+      ensure!(owner == reaction.created.account, Error::<T>::NotAReactionOwner);
+      ensure!(reaction.kind != new_kind, Error::<T>::NewReactionKindNotDiffer);
 
       reaction.kind = new_kind;
       reaction.updated = Some(Self::new_change(owner.clone()));
@@ -915,14 +1057,14 @@ decl_module! {
 
       ensure!(
         <CommentReactionIdByAccount<T>>::exists((owner.clone(), comment_id)),
-        MSG_NO_COMMENT_REACTION_BY_ACCOUNT_TO_DELETE
+        Error::<T>::CommentReactionByAccountNotFound
       );
 
       let action_to_cancel: ScoringAction;
-      let reaction = Self::reaction_by_id(reaction_id).ok_or(MSG_REACTION_NOT_FOUND)?;
-      let ref mut comment = Self::comment_by_id(comment_id).ok_or(MSG_COMMENT_NOT_FOUND)?;
+      let reaction = Self::reaction_by_id(reaction_id).ok_or(Error::<T>::ReactionNotFound)?;
+      let ref mut comment = Self::comment_by_id(comment_id).ok_or(Error::<T>::CommentNotFound)?;
 
-      ensure!(owner == reaction.created.account, MSG_ONLY_REACTION_OWNER_CAN_UPDATE_REACTION);
+      ensure!(owner == reaction.created.account, Error::<T>::NotAReactionOwner);
 
       match reaction.kind {
         ReactionKind::Upvote => {
